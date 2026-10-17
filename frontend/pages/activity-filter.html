@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Activity Filter</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            background: #f3f6f8;
+        }
+
+        .header {
+            background: #0a66c2;
+            color: white;
+            padding: 20px 40px;
+        }
+
+        .header h1 {
+            font-size: 25px;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 700px;
+            margin: 40px auto;
+        }
+
+        .card {
+            background: white;
+            padding: 35px;
+            border-radius: 15px;
+            box-shadow: 0 5px 20px rgba(0, 0, 0, 0.08);
+        }
+
+        h2 {
+            margin-bottom: 10px;
+        }
+
+        .friend-name {
+            color: #0a66c2;
+            font-weight: bold;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            margin-bottom: 28px;
+        }
+
+        .section h3 {
+            margin-bottom: 15px;
+        }
+
+        .date-options {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .date-option {
+            padding: 12px 18px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .date-option input {
+            margin-right: 8px;
+        }
+
+        .date-fields {
+            display: none;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .date-fields div {
+            flex: 1;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 7px;
+            font-size: 14px;
+        }
+
+        input[type="date"] {
+            width: 100%;
+            padding: 11px;
+            border: 1px solid #ccc;
+            border-radius: 7px;
+        }
+
+        .activities {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+
+        .activity-option {
+            padding: 15px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            cursor: pointer;
+        }
+
+        .activity-option input {
+            margin-right: 8px;
+        }
+
+        .continue-btn {
+            width: 100%;
+            padding: 14px;
+            background: #0a66c2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+
+        .continue-btn:hover {
+            background: #004182;
+        }
+
+        .error {
+            color: #d93025;
+            margin-top: 12px;
+            display: none;
+        }
+
+        @media (max-width: 600px) {
+            .date-fields,
+            .activities {
+                grid-template-columns: 1fr;
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <header class="header">
+        <h1>LinkedIn Activity Analyzer</h1>
+    </header>
+
+    <div class="container">
+
+        <div class="card">
+
+            <h2>Select Activity Criteria</h2>
+
+            <p class="friend-name">
+                Selected Friend:
+                <span id="friendName">Loading...</span>
+            </p>
+
+            <div class="section">
+
+                <h3>Select Date</h3>
+
+                <div class="date-options">
+
+                    <label class="date-option">
+                        <input
+                            type="radio"
+                            name="dateType"
+                            value="current"
+                            checked
+                            onchange="changeDateType()"
+                        >
+                        Current Date
+                    </label>
+
+                    <label class="date-option">
+                        <input
+                            type="radio"
+                            name="dateType"
+                            value="range"
+                            onchange="changeDateType()"
+                        >
+                        Start Date → End Date
+                    </label>
+
+                </div>
+
+                <div class="date-fields" id="dateFields">
+
+                    <div>
+                        <label for="startDate">Starting Date</label>
+                        <input type="date" id="startDate">
+                    </div>
+
+                    <div>
+                        <label for="endDate">Ending Date</label>
+                        <input type="date" id="endDate">
+                    </div>
+
+                </div>
+
+            </div>
+
+            <div class="section">
+
+                <h3>Select Activity</h3>
+
+                <div class="activities">
+
+                    <label class="activity-option">
+                        <input type="checkbox" value="posts">
+                        Posts
+                    </label>
+
+                    <label class="activity-option">
+                        <input type="checkbox" value="comments">
+                        Comments
+                    </label>
+
+                    <label class="activity-option">
+                        <input type="checkbox" value="videos">
+                        Videos
+                    </label>
+
+                    <label class="activity-option">
+                        <input type="checkbox" value="other">
+                        Other Public Activity
+                    </label>
+
+                </div>
+
+                <p class="error" id="errorMessage"></p>
+
+            </div>
+
+            <button class="continue-btn" onclick="analyzeActivity()">
+                Analyze Activity
+            </button>
+
+        </div>
+
+    </div>
+
+    <script>
+
+        const friendName = localStorage.getItem("selectedFriend");
+
+        if (friendName) {
+            document.getElementById("friendName").textContent = friendName;
+        } else {
+            document.getElementById("friendName").textContent = "No friend selected";
+        }
+
+
+        function changeDateType() {
+
+            const selectedType =
+                document.querySelector(
+                    'input[name="dateType"]:checked'
+                ).value;
+
+            const dateFields =
+                document.getElementById("dateFields");
+
+            if (selectedType === "range") {
+                dateFields.style.display = "flex";
+            } else {
+                dateFields.style.display = "none";
+            }
+        }
+
+
+        function analyzeActivity() {
+
+            const selectedType =
+                document.querySelector(
+                    'input[name="dateType"]:checked'
+                ).value;
+
+            const activities =
+                Array.from(
+                    document.querySelectorAll(
+                        '.activities input[type="checkbox"]:checked'
+                    )
+                ).map(input => input.value);
+
+
+            const errorMessage =
+                document.getElementById("errorMessage");
+
+
+            if (selectedType === "range") {
+
+                const startDate =
+                    document.getElementById("startDate").value;
+
+                const endDate =
+                    document.getElementById("endDate").value;
+
+
+                if (!startDate || !endDate) {
+
+                    errorMessage.textContent =
+                        "Please select both starting and ending dates.";
+
+                    errorMessage.style.display = "block";
+
+                    return;
+                }
+
+
+                if (startDate > endDate) {
+
+                    errorMessage.textContent =
+                        "Ending date must be after the starting date.";
+
+                    errorMessage.style.display = "block";
+
+                    return;
+                }
+            }
+
+
+            if (activities.length === 0) {
+
+                errorMessage.textContent =
+                    "Please select at least one activity.";
+
+                errorMessage.style.display = "block";
+
+                return;
+            }
+
+
+            const filterData = {
+
+                dateType: selectedType,
+
+                startDate:
+                    document.getElementById("startDate").value || null,
+
+                endDate:
+                    document.getElementById("endDate").value || null,
+
+                activities: activities
+            };
+
+
+            localStorage.setItem(
+                "activityFilter",
+                JSON.stringify(filterData)
+            );
+
+
+            window.location.href = "/dashboard";
+        }
+
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Activity Analyzer</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f3f6f8;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 600px;
+            background: white;
+            padding: 45px;
+            border-radius: 16px;
+            text-align: center;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+        }
+
+        h1 {
+            color: #0a66c2;
+            margin-bottom: 15px;
+        }
+
+        p {
+            color: #555;
+            margin-bottom: 30px;
+        }
+
+        .btn {
+            background: #0a66c2;
+            color: white;
+            border: none;
+            padding: 14px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .btn:hover {
+            background: #004182;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h1>LinkedIn Activity Analyzer</h1>
+
+        <p>
+            Analyze publicly available activity from your accessible
+            LinkedIn connections.
+        </p>
+
+        <button class="btn" onclick="startAnalysis()">
+            Get Started
+        </button>
+    </div>
+
+    <script>
+        function startAnalysis() {
+    window.location.href = "/login";
+}
+    </script>
+
+</body>
+</html>

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>LinkedIn Activity Analyzer - Login</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #f3f6f8;
+        }
+
+        .card {
+            width: 90%;
+            max-width: 450px;
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+            text-align: center;
+        }
+
+        .logo {
+            width: 65px;
+            height: 65px;
+            margin: 0 auto 20px;
+            background: #0a66c2;
+            color: white;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+            font-weight: bold;
+        }
+
+        h1 {
+            margin-bottom: 10px;
+            color: #222;
+        }
+
+        .subtitle {
+            color: #666;
+            line-height: 1.5;
+            margin-bottom: 30px;
+        }
+
+        .login-btn {
+            width: 100%;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            background: #0a66c2;
+            color: white;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        .login-btn:hover {
+            background: #004182;
+        }
+
+        .info {
+            margin-top: 20px;
+            font-size: 13px;
+            color: #777;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="card">
+
+        <div class="logo">in</div>
+
+        <h1>LinkedIn Activity Analyzer</h1>
+
+        <p class="subtitle">
+            Connect your LinkedIn account to continue.
+        </p>
+
+        <button class="login-btn" onclick="loginWithLinkedIn()">
+            Continue with LinkedIn
+        </button>
+
+        <p class="info">
+            Authentication will be handled securely by the backend.
+        </p>
+
+    </div>
+
+    <script>
+        function loginWithLinkedIn() {
+            window.location.href = "/auth/linkedin";
+        }
+    </script>
+
+</body>
+</html>
