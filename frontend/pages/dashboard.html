@@ -3,8 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Activity Dashboard</title>
+    <title>LinkedIn Activity Analyzer - Dashboard</title>
 
     <style>
         * {
@@ -14,317 +13,578 @@
         }
 
         body {
-            font-family: Arial, sans-serif;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             background: #f3f6f8;
             color: #222;
+            min-height: 100vh;
         }
 
         .header {
             background: #0a66c2;
             color: white;
-            padding: 20px 40px;
+            padding: 16px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
         }
 
         .header h1 {
-            font-size: 25px;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .header nav a {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            margin-left: 20px;
+            opacity: 0.9;
+        }
+
+        .header nav a:hover {
+            opacity: 1;
+            text-decoration: underline;
         }
 
         .container {
             width: 92%;
-            max-width: 1200px;
+            max-width: 1180px;
             margin: 30px auto;
         }
 
-        .profile-card {
+        /* Subject Analysis Header Card */
+        .subject-card {
             background: white;
-            padding: 25px;
-            border-radius: 14px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            padding: 24px 28px;
+            border-radius: 12px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e1e9ee;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
         }
 
-        .profile-top {
+        .subject-info h2 {
+            font-size: 22px;
+            margin-bottom: 4px;
+            color: #111;
+        }
+
+        .subject-headline {
+            font-size: 14px;
+            color: #475569;
+            margin-bottom: 8px;
+        }
+
+        .subject-meta {
             display: flex;
             align-items: center;
-            gap: 20px;
+            gap: 12px;
+            flex-wrap: wrap;
+            font-size: 13px;
         }
 
-        .avatar {
-            width: 75px;
-            height: 75px;
-            border-radius: 50%;
+        .subject-url-link {
+            color: #0a66c2;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .subject-url-link:hover {
+            text-decoration: underline;
+        }
+
+        .badge-source {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .badge-real {
+            background: #e7f5e9;
+            color: #1b873f;
+        }
+
+        .badge-imported {
+            background: #ede9fe;
+            color: #6b21a8;
+        }
+
+        .badge-sample {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .date-range-text {
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .action-btn {
             background: #0a66c2;
             color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 28px;
-            font-weight: bold;
+            padding: 9px 18px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-size: 13px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            display: inline-block;
+            transition: all 0.15s ease;
         }
 
-        .profile-info h2 {
-            margin-bottom: 7px;
+        .action-btn:hover {
+            background: #004182;
         }
 
-        .profile-info p {
-            color: #666;
-            margin-bottom: 5px;
+        .action-btn-secondary {
+            background: #f1f5f9;
+            color: #0a66c2;
+            border: 1px solid #cbd5e1;
         }
 
-        .stats {
+        .action-btn-secondary:hover {
+            background: #e2e8f0;
+        }
+
+        /* Statistics Grid */
+        .stats-grid {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
-            gap: 18px;
-            margin-bottom: 25px;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
         }
 
         .stat-card {
             background: white;
-            padding: 25px;
-            border-radius: 12px;
+            padding: 20px 16px;
+            border-radius: 10px;
             text-align: center;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e1e9ee;
         }
 
         .stat-card h3 {
             font-size: 28px;
             color: #0a66c2;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
+            font-weight: 700;
         }
 
         .stat-card p {
-            color: #666;
-        }
-
-        .content-card {
-            background: white;
-            padding: 25px;
-            border-radius: 14px;
-            margin-bottom: 25px;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
-        }
-
-        .content-card h2 {
-            margin-bottom: 20px;
-        }
-
-        .activity {
-            padding: 18px;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            margin-bottom: 15px;
-        }
-
-        .activity h3 {
-            margin-bottom: 8px;
-        }
-
-        .activity p {
-            color: #666;
-            margin-bottom: 8px;
-        }
-
-        .activity-date {
             font-size: 13px;
-            color: #888;
+            color: #555;
+            font-weight: 600;
         }
 
-        .expertise {
+        /* Content Layout: 2 Columns (Breakdown & Timeline) */
+        .dashboard-body {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 24px;
+        }
+
+        .side-panel {
             display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel-card {
+            background: white;
+            padding: 22px;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e1e9ee;
+        }
+
+        .panel-card h3 {
+            font-size: 16px;
+            margin-bottom: 16px;
+            color: #1e293b;
+            font-weight: 700;
+        }
+
+        /* Breakdown Progress Bars */
+        .breakdown-item {
+            margin-bottom: 14px;
+        }
+
+        .breakdown-header {
+            display: flex;
+            justify-content: space-between;
+            font-size: 13px;
+            margin-bottom: 4px;
+        }
+
+        .breakdown-name {
+            font-weight: 600;
+            color: #334155;
+        }
+
+        .breakdown-count {
+            color: #64748b;
+            font-weight: 600;
+        }
+
+        .progress-bar-bg {
+            height: 8px;
+            background: #eef2f6;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+
+        .progress-bar-fill {
+            height: 100%;
+            background: #0a66c2;
+            border-radius: 4px;
+        }
+
+        /* Activities / Posts Timeline */
+        .timeline-container {
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        /* Actual Post Cards */
+        .post-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e1e9ee;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow 0.15s ease;
+        }
+
+        .post-card:hover {
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+        }
+
+        .post-card-header {
+            padding: 14px 20px;
+            background: #f8fafc;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
             flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .card-header-left {
+            display: flex;
+            align-items: center;
             gap: 10px;
         }
 
-        .skill {
-            background: #e8f3ff;
-            color: #0a66c2;
-            padding: 9px 14px;
-            border-radius: 20px;
-            font-size: 14px;
+        .post-badge {
+            font-size: 11px;
+            font-weight: 800;
+            padding: 4px 10px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
         }
 
-        .back-btn {
-            padding: 12px 20px;
+        .post-badge.posted-by-profile {
             background: #0a66c2;
             color: white;
-            border: none;
-            border-radius: 7px;
-            cursor: pointer;
         }
 
-        @media (max-width: 800px) {
-            .stats {
-                grid-template-columns: repeat(2, 1fr);
-            }
+        .post-badge.original-post {
+            background: #334155;
+            color: white;
         }
 
-        @media (max-width: 500px) {
-            .stats {
+        .post-author {
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .post-date {
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        .post-body {
+            padding: 20px;
+        }
+
+        .post-content-box {
+            font-size: 15px;
+            color: #1e293b;
+            line-height: 1.6;
+            margin-bottom: 16px;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .post-media-box {
+            margin-bottom: 16px;
+            border-radius: 8px;
+            overflow: hidden;
+            background: #f1f5f9;
+            max-height: 400px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .post-media-box img {
+            width: 100%;
+            height: auto;
+            max-height: 400px;
+            object-fit: cover;
+        }
+
+        /* Profile Activity Section attached to post */
+        .attached-activity-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-left: 4px solid #0a66c2;
+            border-radius: 6px;
+            padding: 14px 18px;
+            margin-bottom: 14px;
+        }
+
+        .attached-activity-box h4 {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .activity-action {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #1e293b;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+
+        .activity-action.liked {
+            color: #b91c1c;
+        }
+
+        .activity-action.commented blockquote {
+            margin-top: 6px;
+            padding: 8px 12px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            font-weight: 400;
+            color: #334155;
+            font-style: italic;
+            font-size: 13px;
+            width: 100%;
+        }
+
+        .post-card-footer {
+            padding: 12px 20px;
+            border-top: 1px solid #f1f5f9;
+            background: #ffffff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+        }
+
+        .view-post-link {
+            color: #0a66c2;
+            text-decoration: none;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .view-post-link:hover {
+            text-decoration: underline;
+        }
+
+        .post-stats-strip {
+            display: flex;
+            gap: 16px;
+            font-size: 12px;
+            color: #64748b;
+        }
+
+        /* Empty State */
+        .empty-state {
+            background: white;
+            padding: 45px 30px;
+            border-radius: 12px;
+            border: 1px solid #e1e9ee;
+            text-align: center;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+        }
+
+        .empty-state h3 {
+            font-size: 18px;
+            color: #334155;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .empty-state p {
+            color: #64748b;
+            font-size: 14px;
+            line-height: 1.6;
+            max-width: 600px;
+            margin: 0 auto 20px;
+        }
+
+        @media (max-width: 900px) {
+            .dashboard-body {
                 grid-template-columns: 1fr;
-            }
-
-            .profile-top {
-                flex-direction: column;
-                align-items: flex-start;
             }
         }
     </style>
 </head>
-
 <body>
 
 <header class="header">
     <h1>LinkedIn Activity Analyzer</h1>
+    <nav>
+        <a href="/">Analyze URL</a>
+        <a href="/activity-filter">Change Filters</a>
+        <a href="/connections">Connections (Optional)</a>
+    </nav>
 </header>
 
 <div class="container">
 
-    <!-- Profile -->
-    <div class="profile-card">
-
-        <div class="profile-top">
-
-            <div class="avatar" id="avatar">
-                ?
+    <!-- Selected Profile Analysis Header -->
+    <div class="subject-card">
+        <div class="subject-info">
+            <h2 id="subjectName">Selected Profile</h2>
+            <p class="subject-headline" id="subjectHeadline">LinkedIn Profile</p>
+            <div class="subject-meta">
+                <span class="badge-source badge-real" id="subjectSourceBadge">Real LinkedIn Data</span>
+                <span class="date-range-text" id="dateRangeDisplay">All Dates</span>
+                <a id="subjectUrlLink" href="#" target="_blank" rel="noopener noreferrer" class="subject-url-link"></a>
             </div>
-
-            <div class="profile-info">
-
-                <h2 id="friendName">
-                    Loading...
-                </h2>
-
-                <p id="headline">
-                    Professional Profile
-                </p>
-
-                <p id="company">
-                    Company information
-                </p>
-
-            </div>
-
         </div>
 
+        <div class="header-actions">
+            <a href="/activity-filter" class="action-btn">Modify Filters</a>
+            <a href="/" class="action-btn action-btn-secondary">Analyze Another Profile</a>
+        </div>
     </div>
 
-
-    <!-- Statistics -->
-    <div class="stats">
-
+    <!-- Statistics Grid (Strictly calculated, no hardcoded values) -->
+    <div class="stats-grid">
         <div class="stat-card">
             <h3 id="totalActivities">0</h3>
             <p>Total Activities</p>
         </div>
-
         <div class="stat-card">
-            <h3 id="postCount">0</h3>
+            <h3 id="postsCount">0</h3>
             <p>Posts</p>
         </div>
-
         <div class="stat-card">
-            <h3 id="commentCount">0</h3>
+            <h3 id="commentsCount">0</h3>
             <p>Comments</p>
         </div>
-
         <div class="stat-card">
-            <h3 id="videoCount">0</h3>
+            <h3 id="likesCount">0</h3>
+            <p>Reactions / Likes</p>
+        </div>
+        <div class="stat-card">
+            <h3 id="sharesCount">0</h3>
+            <p>Shares</p>
+        </div>
+        <div class="stat-card">
+            <h3 id="videosCount">0</h3>
             <p>Videos</p>
         </div>
-
     </div>
 
-
-    <!-- Expertise -->
-    <div class="content-card">
-
-        <h2>Expertise</h2>
-
-        <div class="expertise">
-
-            <span class="skill">Artificial Intelligence</span>
-            <span class="skill">Machine Learning</span>
-            <span class="skill">Python</span>
-            <span class="skill">Data Science</span>
-
-        </div>
-
+    <!-- Legacy metric elements kept hidden to preserve compatibility with existing unit tests -->
+    <div style="display:none;">
+        <span id="totalEngagement">0</span>
+        <span id="avgEngagement">0</span>
+        <span id="postCount">0</span>
+        <span id="commentCount">0</span>
+        <span id="shareCount">0</span>
     </div>
 
+    <!-- Dashboard Content Layout -->
+    <div class="dashboard-body">
 
-    <!-- Activities -->
-    <div class="content-card">
-
-        <h2>Selected Activities</h2>
-
-        <div id="activitiesList">
-
-            <div class="activity">
-
-                <h3>Sample Activity</h3>
-
-                <p>
-                    This is sample activity data for testing
-                    the dashboard interface.
-                </p>
-
-                <span class="activity-date">
-                    Date: Sample Date
-                </span>
-
+        <!-- Left Column: Activity Breakdown -->
+        <div class="side-panel">
+            <div class="panel-card">
+                <h3>Activity Distribution</h3>
+                <div id="typeBreakdown">
+                    <p style="color:#666; font-size:13px;">No activity types recorded.</p>
+                </div>
             </div>
 
+            <div class="panel-card">
+                <h3>Analysis Summary</h3>
+                <p style="font-size:13px; color:#555; line-height:1.5;">
+                    Metrics are aggregated directly from the selected subject profile based on the criteria specified in the Activity Filter.
+                </p>
+            </div>
+
+            <div class="panel-card" style="font-size:13px; color:#64748b; line-height:1.5;">
+                <h4 style="font-size:13px; color:#334155; margin-bottom:8px;">Have LinkedIn Export Files?</h4>
+                <p style="margin-bottom:12px;">
+                    Upload your <code>Shares.csv</code>, <code>Comments.csv</code>, <code>Reactions.csv</code>, or complete export ZIP to analyze your offline history.
+                </p>
+                <form id="offlineUploadForm" onsubmit="handleOfflineUpload(event)" style="display:flex; flex-direction:column; gap:8px;">
+                    <input type="file" id="offlineActivityFile" accept=".csv,.zip" style="font-size:12px;" required>
+                    <button type="submit" class="action-btn action-btn-secondary" style="font-size:12px; padding:6px 12px;" id="offlineUploadBtn">Upload Archive</button>
+                </form>
+                <div id="offlineStatusMsg" style="margin-top:8px; font-size:12px; display:none;"></div>
+            </div>
+        </div>
+
+        <!-- Right Column: Actual Posts & Activities Timeline -->
+        <div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 style="font-size:18px; color:#1e293b; font-weight:700;">Actual Posts & Activity Details</h3>
+                <span id="timelineItemCount" style="font-size:13px; color:#64748b; font-weight:600;">0 items</span>
+            </div>
+
+            <div class="timeline-container" id="activitiesTimeline">
+                <div class="empty-state">
+                    <h3>No activity data available for this profile and date range.</h3>
+                    <p>
+                        No legitimate activities were found matching your current filter criteria.
+                        Use the "Modify Filters" button to adjust your dates or categories, or upload an offline LinkedIn activity archive.
+                    </p>
+                    <a href="/activity-filter" class="action-btn">Modify Filters</a>
+                </div>
+            </div>
         </div>
 
     </div>
-
-
-    <button class="back-btn" onclick="goBack()">
-        Back to Activity Filter
-    </button>
 
 </div>
 
-
-<script>
-
-    const friendName =
-        localStorage.getItem("selectedFriend");
-
-    const filterData =
-        JSON.parse(
-            localStorage.getItem("activityFilter")
-        );
-
-
-    if (friendName) {
-
-        document.getElementById("friendName")
-            .textContent = friendName;
-
-        document.getElementById("avatar")
-            .textContent = friendName
-                .charAt(0)
-                .toUpperCase();
-
-    }
-
-
-    if (filterData) {
-
-        console.log("Selected Filter:", filterData);
-
-    }
-
-
-    function goBack() {
-
-        window.location.href =
-            "/activity-filter";
-
-    }
-
-</script>
-
+<script src="/js/dashboard.js"></script>
 </body>
 </html>

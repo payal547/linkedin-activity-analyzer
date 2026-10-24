@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LinkedIn Activity Analyzer - Selected Connection</title>
+
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+            background: #f3f6f8;
+            color: #222;
+            min-height: 100vh;
+        }
+
+        .header {
+            background: #0a66c2;
+            color: white;
+            padding: 18px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        .header a {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+        }
+
+        .container {
+            width: 90%;
+            max-width: 580px;
+            margin: 60px auto;
+        }
+
+        .card {
+            background: white;
+            padding: 35px;
+            border-radius: 12px;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.06);
+            border: 1px solid #e1e9ee;
+            text-align: center;
+        }
+
+        .avatar {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: #0a66c2;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 32px;
+            font-weight: bold;
+            margin: 0 auto 16px;
+        }
+
+        h2 {
+            font-size: 22px;
+            margin-bottom: 8px;
+            color: #111;
+        }
+
+        p.headline {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 20px;
+            line-height: 1.4;
+        }
+
+        .badge-source {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 12px;
+            display: inline-block;
+            margin-bottom: 20px;
+        }
+
+        .badge-imported {
+            background: #ede9fe;
+            color: #6b21a8;
+        }
+
+        .badge-real {
+            background: #e7f5e9;
+            color: #1b873f;
+        }
+
+        .actions {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .btn-primary {
+            padding: 12px;
+            background: #0a66c2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+        }
+
+        .btn-primary:hover {
+            background: #004182;
+        }
+
+        .btn-secondary {
+            padding: 12px;
+            background: #f3f6f8;
+            color: #444;
+            border: 1px solid #ccd0d5;
+            border-radius: 6px;
+            font-size: 14px;
+            cursor: pointer;
+            text-decoration: none;
+            display: block;
+        }
+
+        .btn-secondary:hover {
+            background: #e4e6eb;
+        }
+    </style>
+</head>
+<body>
+
+<header class="header">
+    <h1>LinkedIn Activity Analyzer</h1>
+    <a href="/connections">← Connections</a>
+</header>
+
+<div class="container">
+    <div class="card">
+        <div class="avatar" id="friendAvatar">?</div>
+        <h2 id="friendName">No Connection Selected</h2>
+        <p class="headline" id="friendHeadline">Please select a connection from your connections list to analyze.</p>
+        <span class="badge-source badge-imported" id="friendBadge" style="display:none;">Imported from LinkedIn Connections export</span>
+
+        <div class="actions">
+            <a href="/activity-filter" class="btn-primary" id="proceedBtn" style="display:none;">Proceed to Activity Filter →</a>
+            <a href="/connections" class="btn-secondary">Choose a Connection</a>
+        </div>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", () => {
+        const friend = localStorage.getItem("selectedFriend");
+        const source = localStorage.getItem("selectedSource") || "imported";
+
+        if (friend) {
+            document.getElementById("friendName").textContent = friend;
+            document.getElementById("friendAvatar").textContent = friend.charAt(0).toUpperCase();
+            document.getElementById("friendHeadline").textContent = "Selected for LinkedIn Activity Analysis";
+            const badge = document.getElementById("friendBadge");
+            badge.style.display = "inline-block";
+            if (source === "real_linkedin") {
+                badge.className = "badge-source badge-real";
+                badge.textContent = "Real LinkedIn Profile";
+            } else {
+                badge.className = "badge-source badge-imported";
+                badge.textContent = "Imported from LinkedIn Connections export";
+            }
+            document.getElementById("proceedBtn").style.display = "block";
+        }
+    });
+</script>
+</body>
+</html>

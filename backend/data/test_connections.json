@@ -1,0 +1,46 @@
+[
+  {
+    "id": "conn_imp_1",
+    "name": "Aniket Sharma",
+    "headline": "Staff Engineer at Google",
+    "company": "Google",
+    "position": "Staff Engineer",
+    "picture": null,
+    "profile_url": "https://www.linkedin.com/in/aniket-sharma",
+    "connected_on": "10 May 2024",
+    "source": "imported"
+  },
+  {
+    "id": "conn_imp_2",
+    "name": "Sneha Patel",
+    "headline": "Data Scientist at Microsoft",
+    "company": "Microsoft",
+    "position": "Data Scientist",
+    "picture": null,
+    "profile_url": "https://www.linkedin.com/in/sneha-patel",
+    "connected_on": "01 Jun 2024",
+    "source": "imported"
+  },
+  {
+    "id": "conn_imp_1",
+    "name": "Payal Pal",
+    "headline": "Intern at Prodigy InfoTech",
+    "company": "Prodigy InfoTech",
+    "position": "Intern",
+    "picture": null,
+    "profile_url": "https://www.linkedin.com/in/payal-pal-a18b92339",
+    "connected_on": "18 Oct 2026",
+    "source": "imported"
+  },
+  {
+    "id": "conn_imp_2",
+    "name": "Pragyanand Sahoo",
+    "headline": "Researcher at SRHU",
+    "company": "SRHU",
+    "position": "Researcher",
+    "picture": null,
+    "profile_url": "https://www.linkedin.com/in/pragyanandsaho",
+    "connected_on": "19 Oct 2026",
+    "source": "imported"
+  }
+]

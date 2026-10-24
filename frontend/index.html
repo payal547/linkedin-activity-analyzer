@@ -10,72 +10,934 @@
             margin: 0;
             padding: 0;
             box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
         }
 
         body {
-            font-family: Arial, sans-serif;
+            background-color: #f3f2ef;
+            color: #191919;
             min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: #0a66c2;
+            color: white;
+            padding: 16px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .header a {
+            color: white;
+            text-decoration: none;
+            font-size: 14px;
+            opacity: 0.9;
+        }
+
+        .header a:hover {
+            text-decoration: underline;
+            opacity: 1;
+        }
+
+        .main-wrapper {
+            flex: 1;
             display: flex;
             justify-content: center;
             align-items: center;
-            background: #f3f6f8;
+            padding: 40px 20px;
         }
 
         .container {
-            width: 90%;
-            max-width: 600px;
+            width: 100%;
+            max-width: 680px;
             background: white;
-            padding: 45px;
-            border-radius: 16px;
-            text-align: center;
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
+            padding: 38px 40px;
+            border-radius: 14px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e1e9ee;
         }
 
-        h1 {
-            color: #0a66c2;
-            margin-bottom: 15px;
+        .logo-badge {
+            display: inline-block;
+            background: #0a66c2;
+            color: white;
+            font-weight: 800;
+            font-size: 16px;
+            padding: 4px 10px;
+            border-radius: 4px;
+            margin-bottom: 12px;
         }
 
-        p {
+        h2 {
+            font-size: 26px;
+            color: #111;
+            margin-bottom: 6px;
+            font-weight: 700;
+        }
+
+        .subtitle {
             color: #555;
-            margin-bottom: 30px;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 24px;
+        }
+
+        /* Authenticated Session Card */
+        .auth-session-card {
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
+            padding: 18px 20px;
+            margin-bottom: 26px;
+            transition: all 0.2s ease;
+        }
+
+        .auth-loading-state {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            color: #475569;
+            font-size: 14px;
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 3px solid #cbd5e1;
+            border-top-color: #0a66c2;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .auth-connected-state {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .auth-avatar {
+            width: 62px;
+            height: 62px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2.5px solid #057642;
+            box-shadow: 0 2px 8px rgba(5, 118, 66, 0.2);
+            background: #e2e8f0;
+            flex-shrink: 0;
+        }
+
+        .auth-account-details {
+            flex: 1;
+            text-align: left;
+        }
+
+        .auth-name-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 4px;
+            flex-wrap: wrap;
+        }
+
+        .auth-account-name {
+            font-size: 18px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .status-badge-connected {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #e6f4ea;
+            color: #137333;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 12px;
+            border: 1px solid #b7e1cd;
+        }
+
+        .status-badge-disconnected {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            background: #fce8e6;
+            color: #c5221f;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 3px 9px;
+            border-radius: 12px;
+            border: 1px solid #fad2cf;
+        }
+
+        .pulse-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #137333;
+        }
+
+        .auth-account-headline {
+            font-size: 13px;
+            color: #475569;
+            line-height: 1.4;
+        }
+
+        .auth-session-meta {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 4px;
+        }
+
+        .auth-disconnected-state {
+            text-align: left;
+        }
+
+        .auth-disconnected-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #c5221f;
+            margin-bottom: 4px;
+        }
+
+        .auth-disconnected-desc {
+            font-size: 13px;
+            color: #64748b;
+        }
+
+        /* Target Profile Section */
+        .section-separator {
+            display: flex;
+            align-items: center;
+            text-align: center;
+            margin: 22px 0 18px 0;
+            color: #94a3b8;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.8px;
+            text-transform: uppercase;
+        }
+
+        .section-separator::before,
+        .section-separator::after {
+            content: '';
+            flex: 1;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .section-separator span {
+            padding: 0 12px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        .url-input {
+            width: 100%;
+            padding: 14px 16px;
+            font-size: 15px;
+            border: 1.5px solid #ccd0d5;
+            border-radius: 8px;
+            outline: none;
+            transition: all 0.15s ease;
+            background: #fafbfc;
+        }
+
+        .url-input:focus {
+            border-color: #0a66c2;
+            box-shadow: 0 0 0 3px rgba(10, 102, 194, 0.15);
+            background: white;
         }
 
         .btn {
+            width: 100%;
             background: #0a66c2;
             color: white;
             border: none;
-            padding: 14px 30px;
+            padding: 15px 24px;
             border-radius: 8px;
             font-size: 16px;
+            font-weight: 700;
             cursor: pointer;
+            transition: background 0.15s ease, transform 0.05s ease;
         }
 
         .btn:hover {
             background: #004182;
+        }
+
+        .btn:active {
+            transform: scale(0.99);
+        }
+
+        .btn:disabled {
+            background: #90bce3;
+            cursor: not-allowed;
+        }
+
+        .error-message {
+            color: #c81e1e;
+            background: #fde8e8;
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-top: 14px;
+            font-size: 13px;
+            display: none;
+            text-align: left;
+        }
+
+        .status-message {
+            color: #0a66c2;
+            background: #eef3f8;
+            padding: 10px 14px;
+            border-radius: 6px;
+            margin-top: 14px;
+            font-size: 13px;
+            display: none;
+            text-align: left;
+        }
+
+        .quick-examples {
+            margin-top: 24px;
+            padding-top: 20px;
+            border-top: 1px solid #edf2f7;
+            text-align: left;
+            font-size: 13px;
+            color: #666;
+        }
+
+        .quick-examples span {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 8px;
+            color: #444;
+        }
+
+        .example-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            background: #f1f5f9;
+            color: #0a66c2;
+            padding: 5px 10px;
+            border-radius: 14px;
+            text-decoration: none;
+            font-size: 12px;
+            cursor: pointer;
+            border: 1px solid #e2e8f0;
+            transition: all 0.15s ease;
+        }
+
+        .chip:hover {
+            background: #e2e8f0;
+            border-color: #cbd5e1;
+        }
+
+        .secondary-actions {
+            margin-top: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 13px;
+            color: #666;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .secondary-actions a {
+            color: #0a66c2;
+            text-decoration: none;
+            font-weight: 500;
+        }
+
+        .secondary-actions a:hover {
+            text-decoration: underline;
+        }
+
+        .privacy-note {
+            margin-top: 18px;
+            font-size: 12px;
+            color: #888;
+            line-height: 1.5;
+            text-align: center;
+        }
+
+        /* Saved Profiles Section */
+        .saved-profiles-wrapper {
+            margin-top: 26px;
+            text-align: left;
+        }
+
+        .saved-profiles-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        .saved-profiles-subtitle {
+            font-size: 13px;
+            color: #64748b;
+            font-weight: 500;
+        }
+
+        .saved-profiles-count {
+            font-size: 11px;
+            font-weight: 700;
+            color: #0a66c2;
+            background: #eef3f8;
+            padding: 3px 8px;
+            border-radius: 10px;
+        }
+
+        .saved-profiles-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .saved-profile-card {
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 10px;
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            transition: all 0.15s ease;
+        }
+
+        .saved-profile-card:hover {
+            border-color: #cbd5e1;
+            background: white;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+        }
+
+        .saved-profile-body {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+        }
+
+        .saved-profile-avatar {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1.5px solid #cbd5e1;
+            background: #e2e8f0;
+            flex-shrink: 0;
+        }
+
+        .saved-profile-meta {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .saved-profile-name {
+            font-size: 16px;
+            font-weight: 700;
+            color: #0f172a;
+        }
+
+        .saved-profile-headline {
+            font-size: 13px;
+            color: #475569;
+            margin-top: 2px;
+            line-height: 1.3;
+        }
+
+        .saved-profile-link {
+            display: inline-block;
+            font-size: 12px;
+            color: #0a66c2;
+            text-decoration: none;
+            margin-top: 4px;
+            word-break: break-all;
+        }
+
+        .saved-profile-link:hover {
+            text-decoration: underline;
+        }
+
+        .saved-profile-time {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 4px;
+        }
+
+        .saved-profile-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border-top: 1px solid #edf2f7;
+            padding-top: 10px;
+        }
+
+        .btn-analyze-again {
+            background: #0a66c2;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            padding: 7px 14px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.15s ease;
+        }
+
+        .btn-analyze-again:hover {
+            background: #004182;
+        }
+
+        .btn-remove-profile {
+            background: transparent;
+            color: #64748b;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .btn-remove-profile:hover {
+            background: #fee2e2;
+            color: #dc2626;
+            border-color: #fca5a5;
         }
     </style>
 </head>
 
 <body>
 
-    <div class="container">
+    <header class="header">
         <h1>LinkedIn Activity Analyzer</h1>
+        <nav>
+            <a href="/connections">Imported Connections (Optional)</a>
+        </nav>
+    </header>
 
-        <p>
-            Analyze publicly available activity from your accessible
-            LinkedIn connections.
-        </p>
+    <div class="main-wrapper">
+        <div class="container">
+            <span class="logo-badge">in</span>
+            <h2>LinkedIn Activity Analyzer</h2>
+            <p class="subtitle">
+                Inspect public LinkedIn profile activities, posts, reactions, comments, and engagement.
+            </p>
 
-        <button class="btn" onclick="startAnalysis()">
-            Get Started
-        </button>
+            <!-- Authenticated Testing Account Status Card -->
+            <div id="authAccountCard" class="auth-session-card">
+                <!-- Loading State -->
+                <div id="authLoadingState" class="auth-loading-state">
+                    <div class="spinner"></div>
+                    <span>Connecting authorized testing session (Aniket Pal)...</span>
+                </div>
+
+                <!-- Connected State (Confirmed by Backend) -->
+                <div id="authConnectedState" class="auth-connected-state" style="display: none;">
+                    <img id="authAccountPhoto" src="/aniket_pal.jpg" alt="Aniket Pal" class="auth-avatar">
+                    <div class="auth-account-details">
+                        <div class="auth-name-row">
+                            <span id="authAccountName" class="auth-account-name">Aniket Pal</span>
+                            <span class="status-badge-connected">
+                                <span class="pulse-dot"></span>
+                                <span id="authStatusText">LinkedIn Connected ✓</span>
+                            </span>
+                        </div>
+                        <div id="authAccountHeadline" class="auth-account-headline">Student at Graphic Era Deemed to be University</div>
+                        <div class="auth-session-meta">Testing Account • Authenticated Playwright Session Active</div>
+                    </div>
+                </div>
+
+                <!-- Disconnected State -->
+                <div id="authDisconnectedState" class="auth-disconnected-state" style="display: none;">
+                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
+                        <span class="status-badge-disconnected">
+                            <span>●</span>
+                            <span>LinkedIn Not Connected</span>
+                        </span>
+                    </div>
+                    <p class="auth-disconnected-desc">Please check the saved testing session.</p>
+                </div>
+            </div>
+
+            <!-- Target Profile Input Section -->
+            <div id="targetProfileSection">
+                <div class="section-separator">
+                    <span>Enter Target Profile</span>
+                </div>
+
+                <form onsubmit="handleAnalyzeSubmit(event)">
+                    <div class="form-group">
+                        <label for="profileUrlInput">Enter Public LinkedIn Profile URL</label>
+                        <div class="input-wrapper">
+                            <input
+                                type="text"
+                                id="profileUrlInput"
+                                class="url-input"
+                                placeholder="https://www.linkedin.com/in/username/"
+                                autocomplete="off"
+                                required
+                            >
+                        </div>
+                    </div>
+
+                    <button type="submit" id="analyzeProfileBtn" class="btn">
+                        Analyze Profile →
+                    </button>
+                </form>
+
+                <div id="urlErrorMsg" class="error-message"></div>
+                <div id="urlStatusMsg" class="status-message"></div>
+
+                <div class="quick-examples">
+                    <span>Example profile URL formats:</span>
+                    <div class="example-chips">
+                        <button type="button" class="chip" onclick="setExampleUrl('https://www.linkedin.com/in/pragyanandsaho')">
+                            Pragyanand Sahoo
+                        </button>
+                        <button type="button" class="chip" onclick="setExampleUrl('https://www.linkedin.com/in/payal-pal-a18b92339')">
+                            Payal Pal
+                        </button>
+                        <button type="button" class="chip" onclick="setExampleUrl('https://www.linkedin.com/in/satyanadella')">
+                            Satya Nadella
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Saved Target Profiles Section -->
+            <div id="savedProfilesSection" class="saved-profiles-wrapper" style="display: none;">
+                <div class="section-separator">
+                    <span>Saved Profiles</span>
+                </div>
+                <div class="saved-profiles-header">
+                    <span class="saved-profiles-subtitle">Previously analyzed target profiles. Click to analyze again.</span>
+                    <span id="savedProfilesCount" class="saved-profiles-count">0 saved</span>
+                </div>
+                <div id="savedProfilesContainer" class="saved-profiles-grid">
+                    <!-- Dynamically rendered -->
+                </div>
+            </div>
+
+            <div class="secondary-actions">
+                <span>Have offline LinkedIn export files?</span>
+                <a href="/connections">Manage Connections & CSV Archive →</a>
+            </div>
+
+            <p class="privacy-note">
+                🔒 Privacy Protected: No manual LinkedIn login required. Uses authorized background testing session and analyzes publicly accessible data.
+            </p>
+        </div>
     </div>
 
     <script>
-        function startAnalysis() {
-    window.location.href = "/login";
-}
+        // Automatic background session verification on startup
+        document.addEventListener("DOMContentLoaded", () => {
+            initTestingSession();
+            loadSavedProfilesUI();
+        });
+
+        async function initTestingSession() {
+            const loadingEl = document.getElementById("authLoadingState");
+            const connectedEl = document.getElementById("authConnectedState");
+            const disconnectedEl = document.getElementById("authDisconnectedState");
+            const photoEl = document.getElementById("authAccountPhoto");
+            const nameEl = document.getElementById("authAccountName");
+            const headlineEl = document.getElementById("authAccountHeadline");
+            const statusTextEl = document.getElementById("authStatusText");
+
+            try {
+                const response = await fetch("/api/auth/session-status", { credentials: "same-origin" });
+                const data = await response.json();
+
+                if (response.ok && data.connected) {
+                    // Confirmed authenticated testing account
+                    if (loadingEl) loadingEl.style.display = "none";
+                    if (disconnectedEl) disconnectedEl.style.display = "none";
+                    if (connectedEl) connectedEl.style.display = "flex";
+
+                    if (nameEl) nameEl.textContent = data.name || "Aniket Pal";
+                    if (photoEl) photoEl.src = data.picture || "/aniket_pal.jpg";
+                    if (headlineEl) headlineEl.textContent = data.headline || "Student at Graphic Era Deemed to be University";
+                    if (statusTextEl) statusTextEl.textContent = data.status_label || "LinkedIn Connected ✓";
+
+                    // Store authenticated account metadata
+                    sessionStorage.setItem("authenticatedAccount", JSON.stringify({
+                        name: data.name || "Aniket Pal",
+                        picture: data.picture || "/aniket_pal.jpg",
+                        headline: data.headline || ""
+                    }));
+                } else {
+                    // Authentication failed - do NOT pretend to be connected
+                    if (loadingEl) loadingEl.style.display = "none";
+                    if (connectedEl) connectedEl.style.display = "none";
+                    if (disconnectedEl) disconnectedEl.style.display = "block";
+                }
+            } catch (err) {
+                if (loadingEl) loadingEl.style.display = "none";
+                if (connectedEl) connectedEl.style.display = "none";
+                if (disconnectedEl) disconnectedEl.style.display = "block";
+            }
+        }
+
+        function setExampleUrl(url) {
+            const input = document.getElementById("profileUrlInput");
+            if (input) {
+                input.value = url;
+                input.focus();
+            }
+        }
+
+        async function handleAnalyzeSubmit(event) {
+            event.preventDefault();
+
+            const input = document.getElementById("profileUrlInput");
+            const btn = document.getElementById("analyzeProfileBtn");
+            const errorEl = document.getElementById("urlErrorMsg");
+            const statusEl = document.getElementById("urlStatusMsg");
+
+            if (errorEl) errorEl.style.display = "none";
+            if (statusEl) statusEl.style.display = "none";
+
+            const rawUrl = (input?.value || "").trim();
+            if (!rawUrl) {
+                showError("Please enter a LinkedIn profile URL.");
+                return;
+            }
+
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "Validating Profile URL...";
+            }
+
+            try {
+                const response = await fetch("/api/profile/validate-url", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: rawUrl })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok || !data.valid) {
+                    throw new Error(data.error || "Please enter a valid LinkedIn profile URL (e.g. https://www.linkedin.com/in/username/)");
+                }
+
+                if (statusEl) {
+                    statusEl.style.display = "block";
+                    statusEl.textContent = `Profile verified: ${data.name}. Loading Activity Filter...`;
+                }
+
+                // Store resolved TARGET profile details for Activity Filter & Dashboard
+                // Note: The authenticated account remains Aniket Pal. The target profile is separate.
+                localStorage.setItem("selectedProfileUrl", data.profile_url);
+                localStorage.setItem("selectedFriend", data.name);
+                localStorage.setItem("selectedHeadline", data.headline || "LinkedIn Profile");
+                localStorage.setItem("selectedSubjectId", data.subject_id || data.username);
+                localStorage.setItem("selectedSource", data.source || "real_linkedin");
+                sessionStorage.setItem("selectedProfile", JSON.stringify(data));
+
+                // Navigate directly to Step 3: Activity Filter
+                setTimeout(() => {
+                    window.location.href = "/activity-filter";
+                }, 300);
+
+            } catch (err) {
+                showError(err.message);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "Analyze Profile →";
+                }
+            }
+        }
+
+        function showError(msg) {
+            const errorEl = document.getElementById("urlErrorMsg");
+            if (errorEl) {
+                errorEl.textContent = msg;
+                errorEl.style.display = "block";
+            }
+        }
+
+        async function loadSavedProfilesUI() {
+            const section = document.getElementById("savedProfilesSection");
+            const container = document.getElementById("savedProfilesContainer");
+            const countEl = document.getElementById("savedProfilesCount");
+            if (!section || !container) return;
+
+            try {
+                const res = await fetch("/api/profiles/saved");
+                if (!res.ok) return;
+                const data = await res.json();
+                const profiles = data.profiles || [];
+
+                if (profiles.length === 0) {
+                    section.style.display = "none";
+                    return;
+                }
+
+                section.style.display = "block";
+                if (countEl) countEl.textContent = `${profiles.length} saved`;
+                container.innerHTML = "";
+
+                const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
+
+                profiles.forEach(p => {
+                    const card = document.createElement("div");
+                    card.className = "saved-profile-card";
+                    const dateStr = p.last_analyzed ? new Date(p.last_analyzed).toLocaleString(undefined, {
+                        year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                    }) : "";
+                    const photoSrc = p.picture || defaultAvatar;
+
+                    card.innerHTML = `
+                        <div class="saved-profile-body">
+                            <img class="saved-profile-avatar" src="${escapeAttr(photoSrc)}" alt="${escapeAttr(p.name)}" onerror="this.src='${defaultAvatar}';">
+                            <div class="saved-profile-meta">
+                                <div class="saved-profile-name">${escapeHTML(p.name)}</div>
+                                <div class="saved-profile-headline">${escapeHTML(p.headline || "LinkedIn Profile")}</div>
+                                <a class="saved-profile-link" href="${escapeAttr(p.profile_url)}" target="_blank" rel="noopener noreferrer">
+                                    ${escapeHTML(p.profile_url)}
+                                </a>
+                                ${dateStr ? `<div class="saved-profile-time">Last analyzed: ${escapeHTML(dateStr)}</div>` : ''}
+                            </div>
+                        </div>
+                        <div class="saved-profile-actions">
+                            <button type="button" class="btn-analyze-again" onclick="analyzeSavedProfile('${escapeAttr(p.profile_url)}')">
+                                Analyze Again →
+                            </button>
+                            <button type="button" class="btn-remove-profile" onclick="removeSavedProfile('${escapeAttr(p.profile_url)}')">
+                                Remove
+                            </button>
+                        </div>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (e) {
+                console.error("Failed to load saved profiles:", e);
+            }
+        }
+
+        async function analyzeSavedProfile(profileUrl) {
+            const input = document.getElementById("profileUrlInput");
+            if (input) {
+                input.value = profileUrl;
+            }
+            const btn = document.getElementById("analyzeProfileBtn");
+            const statusEl = document.getElementById("urlStatusMsg");
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = "Loading Profile...";
+            }
+            if (statusEl) {
+                statusEl.style.display = "block";
+                statusEl.textContent = "Loading saved profile for analysis...";
+            }
+
+            try {
+                const response = await fetch("/api/profile/validate-url", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: profileUrl })
+                });
+
+                const data = await response.json();
+                if (!response.ok || !data.valid) {
+                    throw new Error(data.error || "Failed to load saved profile");
+                }
+
+                localStorage.setItem("selectedProfileUrl", data.profile_url);
+                localStorage.setItem("selectedFriend", data.name);
+                localStorage.setItem("selectedHeadline", data.headline || "LinkedIn Profile");
+                localStorage.setItem("selectedSubjectId", data.subject_id || data.username);
+                localStorage.setItem("selectedSource", data.source || "real_linkedin");
+                sessionStorage.setItem("selectedProfile", JSON.stringify(data));
+
+                setTimeout(() => {
+                    window.location.href = "/activity-filter";
+                }, 200);
+
+            } catch (err) {
+                showError(err.message);
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "Analyze Profile →";
+                }
+            }
+        }
+
+        async function removeSavedProfile(profileUrl) {
+            if (!confirm("Are you sure you want to remove this saved profile?")) {
+                return;
+            }
+
+            try {
+                const response = await fetch("/api/profiles/saved", {
+                    method: "DELETE",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ url: profileUrl })
+                });
+
+                if (response.ok) {
+                    await loadSavedProfilesUI();
+                } else {
+                    const err = await response.json();
+                    alert(err.error || "Failed to remove saved profile.");
+                }
+            } catch (e) {
+                console.error("Failed to remove profile:", e);
+            }
+        }
+
+        function escapeHTML(str) {
+            if (!str) return "";
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function escapeAttr(str) {
+            if (!str) return "";
+            return String(str)
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#39;");
+        }
     </script>
 
 </body>
