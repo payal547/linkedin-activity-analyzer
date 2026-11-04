@@ -3,3 +3,28 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+
+# Playwright & Browser Cache / Runtime Profiles
+backend/data/browser_cache/
+backend/data/playwright_context/
+backend/data/playwright_session.json
+
+# Scraper Debug & Runtime Logs
+backend/data/scraper_debug.log
+*.log
+logs/*.log
+
+# Runtime Temporary Files & Test State
+backend/data/*.tmp
+backend/data/test_*.json
+backend/data/imported_activities/
+
+# Runtime Analysis & History Caches
+backend/data/latest_analysis.json
+backend/data/profile_analysis_history.json
+backend/data/test_imports/
+
+# Local User Databases & Scraped Activity Caches
+backend/data/activities.json
+backend/data/saved_target_profiles.json
+

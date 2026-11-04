@@ -95,22 +95,26 @@ def logout():
 @auth_bp.route("/api/auth/session-status", methods=["GET", "POST"])
 def session_status():
     """
-    Automatically verifies and connects the testing account (Aniket Pal) using
-    the authorized testing session in the background.
-    Confirms actual authentication status without showing login forms.
+    Returns current LinkedIn session authentication status.
+    - If user has an active authenticated session (OAuth or testing account), returns their session.
+    - Never overwrites an existing legitimate session.
+    - Allows authorized testing account initialization only in development/testing mode, never in production.
     """
-    # 1. Check if user has an active session
+    from flask import current_app
+
+    # 1. Check if user already has an active session
     prof = session.get("linkedin_profile")
-    if prof and prof.get("name") and prof.get("name") == "Aniket Pal":
+    if prof and isinstance(prof, dict) and prof.get("name"):
+        is_test_account = (prof.get("name") == "Aniket Pal")
         return jsonify({
             "authenticated": True,
             "connected": True,
-            "name": prof.get("name", "Aniket Pal"),
-            "headline": prof.get("headline", "Student at Graphic Era Deemed to be University"),
-            "picture": prof.get("picture") or "/aniket_pal.jpg",
+            "name": prof.get("name"),
+            "headline": prof.get("headline", "LinkedIn Member"),
+            "picture": prof.get("picture") or ("/aniket_pal.jpg" if is_test_account else None),
             "status_label": "LinkedIn Connected ✓",
             "email": prof.get("email", ""),
-            "account_type": "Authorized Testing Account"
+            "account_type": "Authorized Testing Account" if is_test_account else "LinkedIn Account"
         })
 
     # 2. Check if manual logout was performed
@@ -121,20 +125,27 @@ def session_status():
             "name": None,
             "picture": None,
             "status_label": "LinkedIn Not Connected",
-            "error": "Please check the saved testing session."
+            "error": "LinkedIn session has been logged out."
         }), 401
 
-    # 3. Automatically initialize the testing session for Aniket Pal
+    # 3. Only initialize authorized testing session if in dev/testing mode and NOT in production
+    is_prod = (os.getenv("APP_ENV", "").lower() == "production" or os.getenv("FLASK_ENV", "").lower() == "production")
+    allow_testing_account = not is_prod and (
+        bool(current_app and current_app.config.get("TESTING")) or
+        os.getenv("TESTING") == "1" or
+        os.getenv("APP_ENV", "development").lower() in ("development", "test", "testing") or
+        os.getenv("ENABLE_TEST_ACCOUNT", "true").lower() in ("1", "true")
+    )
+
     photo_file = Path(__file__).resolve().parent.parent.parent / "frontend" / "aniket_pal.jpg"
     has_photo = photo_file.exists()
     email = os.getenv("LINKEDIN_EMAIL", "").strip()
 
-    # Verify that the testing session is authorized
-    if has_photo:
+    if allow_testing_account and has_photo:
         session.pop("manual_logout", None)
         aniket_profile = {
             "name": "Aniket Pal",
-            "email": email or "payalpal2456@gmail.com",
+            "email": email,
             "sub": "linkedin_user_aniket",
             "picture": "/aniket_pal.jpg",
             "headline": "Student at Graphic Era Deemed to be University"
@@ -151,7 +162,7 @@ def session_status():
             "headline": "Student at Graphic Era Deemed to be University",
             "picture": "/aniket_pal.jpg",
             "status_label": "LinkedIn Connected ✓",
-            "email": email or "payalpal2456@gmail.com",
+            "email": email,
             "account_type": "Authorized Testing Account"
         })
 
@@ -161,6 +172,6 @@ def session_status():
         "name": None,
         "picture": None,
         "status_label": "LinkedIn Not Connected",
-        "error": "Please check the saved testing session."
+        "error": "Please connect your LinkedIn account."
     }), 401
 

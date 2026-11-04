@@ -5,11 +5,16 @@ Tests the complete application journey:
 Does NOT bypass LinkedIn permissions or scrape LinkedIn.
 """
 
+import os
 import threading
 import time
 import unittest
 import sys
 from pathlib import Path
+
+# Enforce strict test database and testing mode across all threads and modules
+os.environ["TESTING"] = "1"
+os.environ["MONGO_DB_NAME"] = "linkedin_activity_analyzer_test"
 
 # Add backend directory to sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
@@ -22,34 +27,62 @@ class TestWorkflowPlaywright(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         # Configure app for local testing
+        os.environ["TESTING"] = "1"
+        os.environ["MONGO_DB_NAME"] = "linkedin_activity_analyzer_test"
         app.config["TESTING"] = True
         app.config["SECRET_KEY"] = "playwright-test-secret"
 
-        # Start live server on localhost port 5005
-        cls.port = 5005
-        cls.server = make_server("127.0.0.1", cls.port, app)
+        # Start live server on localhost with dynamic port allocation (port 0)
+        # Using port 0 allows the operating system to allocate an available ephemeral port,
+        # completely preventing port conflicts with other running instances or stale processes.
+        cls.server = make_server("127.0.0.1", 0, app, threaded=True)
+        cls.port = cls.server.port
         cls.server_thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.server_thread.start()
-        time.sleep(0.5)
+
+        # Actively probe server readiness before letting tests run
+        import urllib.request
+        start_time = time.time()
+        server_ready = False
+        while time.time() - start_time < 10.0:
+            try:
+                with urllib.request.urlopen(f"http://127.0.0.1:{cls.port}/login", timeout=1.0) as resp:
+                    if resp.status == 200:
+                        server_ready = True
+                        break
+            except Exception:
+                time.sleep(0.1)
+
+        if not server_ready:
+            raise RuntimeError(f"Flask test server failed to respond on http://127.0.0.1:{cls.port} within 10 seconds.")
 
     @classmethod
     def tearDownClass(cls):
-        cls.server.shutdown()
-        cls.server_thread.join(timeout=2)
+        try:
+            cls.server.shutdown()
+        except Exception:
+            pass
+        try:
+            cls.server.server_close()
+        except Exception:
+            pass
+        if hasattr(cls, "server_thread") and cls.server_thread.is_alive():
+            cls.server_thread.join(timeout=2.0)
 
     def setUp(self):
-        from services.saved_profiles_storage import _get_storage_file
+        from services.saved_profiles_storage import _get_storage_file, TEST_PROFILES_FILE
         test_file = _get_storage_file()
-        if test_file.exists():
+        # Strictly ensure we ONLY ever touch the test storage file
+        if test_file.name == TEST_PROFILES_FILE.name and test_file.exists():
             try:
                 test_file.unlink()
             except Exception:
                 pass
 
     def tearDown(self):
-        from services.saved_profiles_storage import _get_storage_file
+        from services.saved_profiles_storage import _get_storage_file, TEST_PROFILES_FILE
         test_file = _get_storage_file()
-        if test_file.exists():
+        if test_file.name == TEST_PROFILES_FILE.name and test_file.exists():
             try:
                 test_file.unlink()
             except Exception:
@@ -119,6 +152,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
 
             # 5. Activity Filter Page
             page.wait_for_url("**/activity-filter")
+            page.wait_for_load_state("networkidle")
             target_name = page.text_content("#friendName")
             self.assertIn("Payal Pal", target_name)
 
@@ -135,6 +169,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
 
             # Verify analysis results appear on Dashboard
             page.wait_for_selector("#totalActivities")
+            page.wait_for_function("() => document.getElementById('subjectName') && document.getElementById('subjectName').textContent !== 'Selected Profile'", timeout=10000)
             total_activities = int(page.text_content("#totalActivities"))
             self.assertTrue(total_activities >= 0)
 
@@ -231,6 +266,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
 
                 # 7. Verify Activity Filter Page
                 page.wait_for_url("**/activity-filter")
+                page.wait_for_load_state("networkidle")
                 target_name = page.text_content("#friendName")
                 self.assertIn("Sneha Patel", target_name)
                 source_badge = page.text_content("#sourceBadge")
@@ -316,6 +352,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
 
                 # 6. Verify Activity Filter page loaded
                 page.wait_for_url("**/activity-filter")
+                page.wait_for_load_state("networkidle")
                 target_name = page.text_content("#friendName")
                 self.assertIn("Payal Pal", target_name)
 
@@ -323,6 +360,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
                 page.click("#analyzeBtn")
                 page.wait_for_url("**/dashboard")
                 self.assertIn("Dashboard", page.title())
+                page.wait_for_function("() => document.getElementById('subjectName') && document.getElementById('subjectName').textContent !== 'Selected Profile'", timeout=10000)
                 self.assertIn("Payal Pal", page.text_content("#subjectName"))
 
                 browser.close()
@@ -371,6 +409,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
 
             # 4. Step 3: Activity Filter Page
             page.wait_for_url("**/activity-filter")
+            page.wait_for_load_state("networkidle")
             self.assertIn("Filter Criteria", page.title())
 
             # Verify Profile Name, Profile URL, and Headline are displayed
@@ -387,6 +426,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
 
             # 6. Step 4: Verify Dashboard Metrics and Real Calculated Data
             page.wait_for_selector("#subjectName")
+            page.wait_for_function("() => document.getElementById('subjectName') && document.getElementById('subjectName').textContent !== 'Selected Profile'", timeout=10000)
             self.assertIn("Pragyanand Sahoo", page.text_content("#subjectName"))
             self.assertTrue(page.locator("#totalActivities").is_visible())
             self.assertTrue(page.locator("#postsCount").is_visible())
@@ -448,6 +488,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
 
             # 5. Verify Target profile reaches Activity Filter
             page.wait_for_url("**/activity-filter")
+            page.wait_for_load_state("networkidle")
             target_name = page.text_content("#profileNameDisplay")
             self.assertIn("Payal Pal", target_name)
 
@@ -457,6 +498,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
             self.assertIn("Dashboard", page.title())
 
             # 7. Dashboard shows target profile Payal Pal
+            page.wait_for_function("() => document.getElementById('subjectName') && document.getElementById('subjectName').textContent !== 'Selected Profile'", timeout=10000)
             dashboard_subject = page.text_content("#subjectName")
             self.assertIn("Payal Pal", dashboard_subject)
 
@@ -479,13 +521,24 @@ class TestWorkflowPlaywright(unittest.TestCase):
         from services.saved_profiles_storage import (
             save_target_profile,
             remove_saved_profile,
-            _get_storage_file
+            _get_storage_file,
+            TEST_PROFILES_FILE
         )
 
-        # Clear test storage before test
+        # Clear test storage before test - strictly verify it's the test file
         test_file = _get_storage_file()
+        assert test_file.name == TEST_PROFILES_FILE.name, f"Safety check failed: expected test file, got {test_file.name}"
         if test_file.exists():
             test_file.unlink()
+
+        # Clear isolated test database collection
+        try:
+            from db.mongo import get_db
+            test_db = get_db()
+            if test_db.name == "linkedin_activity_analyzer_test":
+                test_db["saved_profiles"].delete_many({})
+        except Exception:
+            pass
 
         base_url = f"http://127.0.0.1:{self.port}"
 
@@ -554,9 +607,148 @@ class TestWorkflowPlaywright(unittest.TestCase):
 
             browser.close()
 
-        # Clean up
-        if test_file.exists():
+        # Clean up test storage file and test collection
+        if test_file.name == TEST_PROFILES_FILE.name and test_file.exists():
             test_file.unlink()
+        try:
+            from db.mongo import get_db
+            test_db = get_db()
+            if test_db.name == "linkedin_activity_analyzer_test":
+                test_db["saved_profiles"].delete_many({})
+        except Exception:
+            pass
+
+
+
+    def test_dashboard_renders_preserved_history_metrics_on_http_999(self):
+        """
+        Verify that when a new LinkedIn attempt fails with HTTP 999 rate limiting:
+        1. Top metrics show the 10 activities from preserved historical analysis (not 0).
+        2. Breakdown and counts show 4 posts, 3 comments, 2 likes, 1 share, 0 videos.
+        3. Date range reflects the historical range (2026-07-16 -> 2026-10-29).
+        4. Clear banners distinguish the current HTTP 999 attempt from preserved history.
+        5. Exactly 10 historical activity cards are rendered.
+        """
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            self.skipTest("Playwright not installed in environment")
+
+        from services.analysis_storage import (
+            save_profile_successful_analysis,
+            save_latest_analysis,
+            clear_latest_analysis,
+            clear_profile_history
+        )
+
+        test_slug = "neel-mani"
+        test_url = f"https://www.linkedin.com/in/{test_slug}/"
+        mock_acts = []
+        for i in range(10):
+            act_type = "post" if i < 4 else ("comment" if i < 7 else ("like" if i < 9 else "share"))
+            mock_acts.append({
+                "id": f"hist_act_{i}",
+                "type": act_type,
+                "action_type": act_type,
+                "text": f"Historical {act_type} #{i+1} by Dr. Neel Mani",
+                "post_content": f"Historical {act_type} #{i+1} by Dr. Neel Mani",
+                "date": "2026-08-15",
+                "relative_date": "2mo",
+                "post_author": "Dr. Neel Mani",
+                "post_author_headline": "Professor & AI Researcher",
+                "is_own_post": True,
+                "likes": 15,
+                "comments": 2,
+                "shares": 1
+            })
+
+        mock_success = {
+            "subject_name": "Dr. Neel Mani",
+            "subject_url": test_url,
+            "headline": "Professor & AI Researcher",
+            "total_activities": 10,
+            "posts_count": 4,
+            "comments_count": 3,
+            "likes_count": 2,
+            "shares_count": 1,
+            "videos_count": 0,
+            "by_type": {"post": 4, "comment": 3, "like": 2, "share": 1},
+            "date_range": {"start": "2026-07-16", "end": "2026-10-29"},
+            "activities": mock_acts
+        }
+        save_profile_successful_analysis(test_slug, mock_success)
+
+        # Subsequent failed scrape returning HTTP 999
+        failed_attempt = {
+            "subject_name": "Dr. Neel Mani",
+            "subject_url": test_url,
+            "headline": "Professor & AI Researcher",
+            "total_activities": 0,
+            "posts_count": 0,
+            "comments_count": 0,
+            "likes_count": 0,
+            "shares_count": 0,
+            "videos_count": 0,
+            "activities": [],
+            "status_type": "RATE_LIMITED_999",
+            "retrieval_completeness": "BLOCKED",
+            "empty_message": "LinkedIn rate limit encountered (HTTP 999). Please wait before retrying.",
+            "date_range": {"start": "2026-10-31", "end": "2026-10-31"}
+        }
+        save_latest_analysis(failed_attempt)
+
+        base_url = f"http://127.0.0.1:{self.port}"
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            context = browser.new_context()
+            page = context.new_page()
+
+            page.goto(f"{base_url}/dashboard")
+            page.wait_for_url("**/dashboard")
+            self.assertIn("Dashboard", page.title())
+
+            # 1. Wait for renderAnalysisResults to complete
+            page.wait_for_selector("#historicalStatsBanner")
+
+            # Subject Header & Badges
+            name_text = page.text_content("#subjectName")
+            self.assertIn("Dr. Neel Mani", name_text)
+
+            # 2. Date Range clearly shows historical period
+            date_range_text = page.text_content("#dateRangeDisplay")
+            self.assertIn("2026-07-16", date_range_text)
+            self.assertIn("2026-10-29", date_range_text)
+            self.assertIn("Historical", date_range_text)
+
+            # 3. Top Metrics must reflect historical analysis (10, 4, 3, 2, 1, 0)
+            page.wait_for_selector("#totalActivities")
+            self.assertEqual(page.text_content("#totalActivities").strip(), "10")
+            self.assertEqual(page.text_content("#postsCount").strip(), "4")
+            self.assertEqual(page.text_content("#commentsCount").strip(), "3")
+            self.assertEqual(page.text_content("#likesCount").strip(), "2")
+            self.assertEqual(page.text_content("#sharesCount").strip(), "1")
+            self.assertEqual(page.text_content("#videosCount").strip(), "0")
+
+            # 4. Historical Notice Banner above stats grid
+            stats_banner = page.locator("#historicalStatsBanner")
+            self.assertTrue(stats_banner.is_visible())
+            self.assertIn("Metrics from Preserved Historical Analysis", stats_banner.text_content())
+
+            # 5. Diagnostic Banner distinguishing current HTTP 999 attempt
+            page.wait_for_selector(".diagnostic-current-banner")
+            diag_text = page.text_content(".diagnostic-current-banner")
+            self.assertIn("HTTP 999", diag_text)
+            self.assertIn("Displaying Preserved Historical Analysis", diag_text)
+
+            # 6. Exactly 10 historical cards rendered
+            cards = page.locator(".feed-post-card")
+            self.assertEqual(cards.count(), 10)
+
+            # 7. Card header displays historical badge
+            hist_card_badges = page.locator(".historical-badge")
+            self.assertEqual(hist_card_badges.count(), 10)
+
+            browser.close()
 
 
 if __name__ == "__main__":

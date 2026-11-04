@@ -16,4 +16,9 @@ SECRET_KEY = os.getenv("SECRET_KEY") or "linkedin-analyzer-dev-secret"
 
 LINKEDIN_CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID", "")
 LINKEDIN_CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET", "")
-LINKEDIN_REDIRECT_URI = os.getenv("LINKEDIN_REDIRECT_URI", "http://127.0.0.1:5000/api/auth/callback")
+LINKEDIN_REDIRECT_URI = os.getenv("LINKEDIN_REDIRECT_URI", "http://127.0.0.1:5000/auth/linkedin/callback")
+
+# MongoDB Configuration (Local Community Server)
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "linkedin_activity_analyzer")
+

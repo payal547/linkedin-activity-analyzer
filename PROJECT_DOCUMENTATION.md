@@ -518,15 +518,25 @@ Executes deterministic calculations over raw activity rows:
 - Calculates category totals (posts, comments, likes, shares, videos).
 - Computes total engagement ($\text{likes} + \text{comments} + \text{shares}$) and average engagement per item.
 - Preserves grouped post attributes (root author, permalink, feedshare media).
+- Invokes `sentiment_service.enrich_activities_list` to classify sentiment and tone for each activity.
 
-### 4. `saved_profiles_storage.py`
+### 4. `sentiment_service.py`
+Provides AI-based Sentiment and Emotional Tone Analysis over real LinkedIn post and comment text:
+- **Sentiment Classification:** `Positive`, `Negative`, `Neutral`, or `Not available` / `Analysis unavailable`.
+- **Tone Classification:** 15 emotional categories (`Celebratory`, `Motivational`, `Inspirational`, `Thankful`, `Excited`, `Happy`, `Professional`, `Informative`, `Humorous`, `Concerned`, `Critical`, `Angry`, `Sad`, `Frustrated`, `Neutral`).
+- **Comment vs. Post Analysis:** Analyzes the user's actual comment text separately from the parent post text while keeping them linked.
+- **LRU In-Memory Caching:** Eliminates duplicate work for identical post or comment texts.
+- **Zero-Failure Architecture:** Fallback gracefully on empty, missing, or failed inputs without breaking the dashboard or hiding real posts.
+- **Optional LLM Integration:** Supports Google Gemini (`gemini-1.5-flash`) if `GEMINI_API_KEY` is provided in `.env`.
+
+### 5. `saved_profiles_storage.py`
 Provides persistent storage for target profiles:
 - Reads and writes to `backend/data/saved_target_profiles.json` (or `test_saved_target_profiles.json` under test environments).
 - Normalizes profile URLs to `https://www.linkedin.com/in/{slug}/`.
 - Deduplicates profiles by lowercase slug. When an existing profile is analyzed again, it updates `last_analyzed`, `headline`, and `picture` in-place without duplicating records.
 - Automatically sorts records by `last_analyzed` descending.
 
-### 5. `connections_storage.py`
+### 6. `connections_storage.py`
 Provides thread-safe read/write operations for `backend/data/connections.json`:
 - `load_saved_connections()`
 - `save_connection()`
@@ -534,7 +544,7 @@ Provides thread-safe read/write operations for `backend/data/connections.json`:
 - `delete_saved_connection()`
 - `clear_all_connections()`
 
-### 6. `activities_storage.py`
+### 7. `activities_storage.py`
 Provides persistence for manually logged or parsed activities in `backend/data/activities.json`:
 - Supports filtering by `subject_name`, `subject_id`, or `subject_url`.
 - Inserts newest items first.

@@ -437,6 +437,200 @@
             transition: all 0.15s ease;
         }
 
+        .saved-profiles-batch-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8fafc;
+            padding: 10px 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border: 1.5px solid #cbd5e1;
+        }
+
+        .batch-selection-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .select-all-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            cursor: pointer;
+        }
+
+        .select-all-label input {
+            accent-color: #0a66c2;
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+
+        .selected-count-badge {
+            font-size: 12px;
+            font-weight: 700;
+            color: #0a66c2;
+            background: #e0f2fe;
+            padding: 3px 10px;
+            border-radius: 12px;
+            border: 1px solid #bae6fd;
+        }
+
+        /* Common Date Range Box (Directly below Select All) */
+        .saved-profiles-common-dates {
+            background: #ffffff;
+            border: 1.5px solid #cbd5e1;
+            border-radius: 10px;
+            padding: 14px 16px;
+            margin-bottom: 14px;
+        }
+
+        .common-dates-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+
+        .common-dates-title {
+            font-size: 13px;
+            font-weight: 700;
+            color: #1e293b;
+        }
+
+        .common-dates-hint {
+            font-size: 11px;
+            color: #64748b;
+        }
+
+        .common-dates-fields {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+        }
+
+        @media (max-width: 520px) {
+            .common-dates-fields {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .saved-profiles-footer-actions {
+            margin-top: 16px;
+        }
+
+        .saved-profiles-footer-actions .btn-analyze-selected {
+            width: 100%;
+            justify-content: center;
+            padding: 12px 20px;
+            font-size: 15px;
+        }
+
+        .btn-analyze-selected {
+            background: #0a66c2;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: background 0.15s ease, transform 0.05s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-analyze-selected:hover {
+            background: #004182;
+        }
+
+        .btn-analyze-selected:disabled {
+            background: #94a3b8;
+            cursor: not-allowed;
+        }
+
+        .saved-profile-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 4px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #edf2f7;
+        }
+
+        .profile-select-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 700;
+            color: #0f172a;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .profile-select-checkbox {
+            width: 18px;
+            height: 18px;
+            accent-color: #0a66c2;
+            cursor: pointer;
+        }
+
+        .saved-profile-card.selected-card {
+            border-color: #0a66c2;
+            background: #f0f7ff;
+            box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.2);
+        }
+
+        .saved-profile-dates {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            background: #ffffff;
+            padding: 10px 12px;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            margin-top: 4px;
+        }
+
+        .date-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            text-align: left;
+        }
+
+        .date-field label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #475569;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 0;
+        }
+
+        .date-field input[type="date"] {
+            padding: 6px 8px;
+            font-size: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            outline: none;
+            color: #1e293b;
+            background: #fafbfc;
+            font-family: inherit;
+        }
+
+        .date-field input[type="date"]:focus {
+            border-color: #0a66c2;
+            background: white;
+        }
+
         .saved-profile-card:hover {
             border-color: #cbd5e1;
             background: white;
@@ -457,6 +651,23 @@
             border: 1.5px solid #cbd5e1;
             background: #e2e8f0;
             flex-shrink: 0;
+        }
+
+        .saved-profile-avatar-fallback {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-weight: 700;
+            font-size: 16px;
+            letter-spacing: 0.5px;
+            flex-shrink: 0;
+            user-select: none;
+            border: 1.5px solid rgba(0, 0, 0, 0.08);
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
         }
 
         .saved-profile-meta {
@@ -644,11 +855,72 @@
                     <span>Saved Profiles</span>
                 </div>
                 <div class="saved-profiles-header">
-                    <span class="saved-profiles-subtitle">Previously analyzed target profiles. Click to analyze again.</span>
+                    <span class="saved-profiles-subtitle">Select saved profiles and choose a date range to analyze.</span>
                     <span id="savedProfilesCount" class="saved-profiles-count">0 saved</span>
                 </div>
+
+                <!-- Batch Action Toolbar: Select All -->
+                <div class="saved-profiles-batch-actions">
+                    <div class="batch-selection-info">
+                        <label class="select-all-label">
+                            <input type="checkbox" id="selectAllProfilesCheckbox" onchange="toggleSelectAll(this.checked)">
+                            <span>Select All</span>
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Common Date Range Selector (Directly below Select All and before profile cards) -->
+                <div class="saved-profiles-common-dates" id="savedProfilesDateRange">
+                    <div class="common-dates-header">
+                        <span class="common-dates-title">Date Range:</span>
+                        <span class="common-dates-hint">Applies to all selected profiles</span>
+                    </div>
+                    <div class="common-dates-fields">
+                        <div class="date-field">
+                            <label for="commonStartDate">Start Date:</label>
+                            <input type="date" id="commonStartDate" class="common-start-date">
+                        </div>
+                        <div class="date-field">
+                            <label for="commonEndDate">End Date:</label>
+                            <input type="date" id="commonEndDate" class="common-end-date">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Selected Profiles Status (Directly below Date Range and BEFORE profile list) -->
+                <div class="saved-profiles-selection-status">
+                    <span id="selectedProfilesCountText" class="selected-count-badge">Selected: 0 profiles</span>
+                </div>
+
+                <div id="savedProfilesMsg" class="error-message" style="margin-bottom: 12px; display: none;"></div>
+
+                <!-- Individual Saved Profile Cards Container (No date selectors inside) -->
                 <div id="savedProfilesContainer" class="saved-profiles-grid">
                     <!-- Dynamically rendered -->
+                </div>
+
+                <!-- Multi-Profile Analysis Progress Feedback (Phase 3 - Issue 7) -->
+                <div id="multiProfileProgressCard" style="display: none; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
+                        <h4 style="margin:0; font-size:14px; font-weight:600; color:#1e293b;" id="multiProgressHeading">Analyzing Selected Profiles</h4>
+                        <span id="multiProgressStep" style="font-size:12px; font-weight:600; color:#0a66c2;">0 / 0</span>
+                    </div>
+                    <div style="background:#f1f5f9; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;">
+                        <div id="multiProgressBar" style="width:0%; height:100%; background:#0a66c2; transition:width 0.3s ease;"></div>
+                    </div>
+                    <p id="multiProgressStatusText" style="margin:0 0 6px 0; font-size:13px; color:#334155; font-weight:500;">Starting analysis...</p>
+                    <p id="multiProgressDetailText" style="margin:0; font-size:11.5px; color:#64748b;">Applying polite delays between requests to respect LinkedIn limits.</p>
+                    <div id="multiProgressLog" style="margin-top:12px; display:none; max-height:120px; overflow-y:auto; font-size:12px; border-top:1px solid #f1f5f9; padding-top:8px;"></div>
+                    <div id="multiProgressActions" style="margin-top:12px; display:none;">
+                        <a href="/dashboard" class="btn-analyze-selected" style="display:inline-block; text-decoration:none; padding:8px 16px; font-size:13px; text-align:center;">View Results in Dashboard →</a>
+                    </div>
+                </div>
+
+                <!-- Analyze Selected Profiles Button (Directly below profile cards) -->
+                <div class="saved-profiles-footer-actions">
+                    <button type="button" id="analyzeSelectedProfilesBtn" class="btn-analyze-selected" onclick="handleAnalyzeSelectedProfiles()">
+                        Analyze Selected Profiles →
+                    </button>
                 </div>
             </div>
 
@@ -792,6 +1064,60 @@
             }
         }
 
+        function isSafeImageUrl(url) {
+            if (!url || typeof url !== "string") return false;
+            const trimmed = url.trim().toLowerCase();
+            return trimmed.startsWith("https://") || trimmed.startsWith("http://") || (trimmed.startsWith("/") && !trimmed.startsWith("//"));
+        }
+
+        function getInitials(name) {
+            if (!name) return "LI";
+            const cleaned = name.replace(/,\s*(phd|md|mba|ms|bsc|msc|dr)\b/gi, '')
+                                .replace(/^(dr|mr|mrs|ms|prof)\.?\s+/gi, '')
+                                .trim();
+            const compoundParts = cleaned.split(/[\s\-_]+|(?<=[a-z])(?=[A-Z])/).filter(Boolean);
+            if (compoundParts.length >= 2) {
+                return (compoundParts[0][0] + compoundParts[compoundParts.length - 1][0]).toUpperCase();
+            }
+            if (cleaned.toLowerCase() === 'neelmani') {
+                return 'NM';
+            }
+            if (cleaned.length >= 2) {
+                return cleaned.slice(0, 2).toUpperCase();
+            }
+            return cleaned.toUpperCase() || 'LI';
+        }
+
+        function getAvatarColor(name) {
+            const palette = [
+                "#0a66c2", "#057642", "#7c3aed", "#b45309",
+                "#0284c7", "#c026d3", "#0d9488", "#334155",
+                "#4338ca", "#b91c1c", "#15803d", "#0369a1"
+            ];
+            let hash = 0;
+            const str = name || "";
+            for (let i = 0; i < str.length; i++) {
+                hash = (hash << 5) - hash + str.charCodeAt(i);
+                hash |= 0;
+            }
+            const idx = Math.abs(hash) % palette.length;
+            return palette[idx];
+        }
+
+        function handleSavedProfileImgError(imgEl) {
+            if (!imgEl) return;
+            const name = imgEl.dataset.name || imgEl.getAttribute("alt") || "";
+            const initials = getInitials(name);
+            const bg = getAvatarColor(name);
+            const fallbackDiv = document.createElement("div");
+            fallbackDiv.className = "saved-profile-avatar-fallback";
+            fallbackDiv.style.backgroundColor = bg;
+            fallbackDiv.textContent = initials;
+            fallbackDiv.setAttribute("aria-label", name);
+            fallbackDiv.setAttribute("title", name);
+            imgEl.replaceWith(fallbackDiv);
+        }
+
         async function loadSavedProfilesUI() {
             const section = document.getElementById("savedProfilesSection");
             const container = document.getElementById("savedProfilesContainer");
@@ -813,7 +1139,20 @@
                 if (countEl) countEl.textContent = `${profiles.length} saved`;
                 container.innerHTML = "";
 
-                const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
+                const _now = new Date();
+                const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+                const _dPast = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() - 29);
+                const past30Str = `${_dPast.getFullYear()}-${String(_dPast.getMonth() + 1).padStart(2, '0')}-${String(_dPast.getDate()).padStart(2, '0')}`;
+
+                // Set common date defaults if not already chosen
+                const commonStartInput = document.getElementById("commonStartDate");
+                const commonEndInput = document.getElementById("commonEndDate");
+                if (commonStartInput && !commonStartInput.value) {
+                    commonStartInput.value = past30Str;
+                }
+                if (commonEndInput && !commonEndInput.value) {
+                    commonEndInput.value = todayStr;
+                }
 
                 profiles.forEach(p => {
                     const card = document.createElement("div");
@@ -821,11 +1160,26 @@
                     const dateStr = p.last_analyzed ? new Date(p.last_analyzed).toLocaleString(undefined, {
                         year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                     }) : "";
-                    const photoSrc = p.picture || defaultAvatar;
+                    const hasValidPhoto = Boolean(p.picture && isSafeImageUrl(p.picture));
+                    const initials = getInitials(p.name);
+                    const avatarBg = getAvatarColor(p.name);
+
+                    const avatarHTML = hasValidPhoto
+                        ? `<img class="saved-profile-avatar" src="${escapeAttr(p.picture)}" alt="${escapeAttr(p.name)}" data-name="${escapeAttr(p.name)}" onerror="handleSavedProfileImgError(this);">`
+                        : `<div class="saved-profile-avatar-fallback" style="background-color: ${avatarBg};" aria-label="${escapeAttr(p.name)}" title="${escapeAttr(p.name)}">${escapeHTML(initials)}</div>`;
 
                     card.innerHTML = `
+                        <div class="saved-profile-top">
+                            <label class="profile-select-label">
+                                <input type="checkbox" class="profile-select-checkbox" data-url="${escapeAttr(p.profile_url)}" onchange="handleProfileSelectionChange(this)">
+                                <span class="select-text">Select</span>
+                            </label>
+                            <button type="button" class="btn-remove-profile" onclick="removeSavedProfile('${escapeAttr(p.profile_url)}')">
+                                Remove
+                            </button>
+                        </div>
                         <div class="saved-profile-body">
-                            <img class="saved-profile-avatar" src="${escapeAttr(photoSrc)}" alt="${escapeAttr(p.name)}" onerror="this.src='${defaultAvatar}';">
+                            ${avatarHTML}
                             <div class="saved-profile-meta">
                                 <div class="saved-profile-name">${escapeHTML(p.name)}</div>
                                 <div class="saved-profile-headline">${escapeHTML(p.headline || "LinkedIn Profile")}</div>
@@ -839,34 +1193,293 @@
                             <button type="button" class="btn-analyze-again" onclick="analyzeSavedProfile('${escapeAttr(p.profile_url)}')">
                                 Analyze Again →
                             </button>
-                            <button type="button" class="btn-remove-profile" onclick="removeSavedProfile('${escapeAttr(p.profile_url)}')">
-                                Remove
-                            </button>
                         </div>
                     `;
                     container.appendChild(card);
                 });
+
+                updateSelectedProfilesCount();
             } catch (e) {
                 console.error("Failed to load saved profiles:", e);
             }
         }
 
-        async function analyzeSavedProfile(profileUrl) {
-            const input = document.getElementById("profileUrlInput");
-            if (input) {
-                input.value = profileUrl;
+        function handleProfileSelectionChange(checkbox) {
+            const card = checkbox.closest(".saved-profile-card");
+            if (card) {
+                if (checkbox.checked) {
+                    card.classList.add("selected-card");
+                } else {
+                    card.classList.remove("selected-card");
+                }
             }
-            const btn = document.getElementById("analyzeProfileBtn");
-            const statusEl = document.getElementById("urlStatusMsg");
-            if (btn) {
-                btn.disabled = true;
-                btn.textContent = "Loading Profile...";
+            updateSelectedProfilesCount();
+        }
+
+        function toggleSelectAll(checked) {
+            const checkboxes = document.querySelectorAll(".profile-select-checkbox");
+            checkboxes.forEach(cb => {
+                cb.checked = checked;
+                const card = cb.closest(".saved-profile-card");
+                if (card) {
+                    if (checked) card.classList.add("selected-card");
+                    else card.classList.remove("selected-card");
+                }
+            });
+            updateSelectedProfilesCount();
+        }
+
+        function updateSelectedProfilesCount() {
+            const checkedBoxes = document.querySelectorAll(".profile-select-checkbox:checked");
+            const countText = document.getElementById("selectedProfilesCountText");
+            const selectAllCb = document.getElementById("selectAllProfilesCheckbox");
+            const allBoxes = document.querySelectorAll(".profile-select-checkbox");
+
+            if (countText) {
+                if (checkedBoxes.length === 0) {
+                    countText.textContent = "Selected: 0 profiles";
+                } else if (checkedBoxes.length === 1) {
+                    countText.textContent = "Selected: 1 profile";
+                } else if (allBoxes.length > 1 && checkedBoxes.length === allBoxes.length) {
+                    countText.textContent = "Selected: All profiles";
+                } else {
+                    countText.textContent = `Selected: ${checkedBoxes.length} profiles`;
+                }
             }
-            if (statusEl) {
-                statusEl.style.display = "block";
-                statusEl.textContent = "Loading saved profile for analysis...";
+            if (selectAllCb && allBoxes.length > 0) {
+                selectAllCb.checked = (checkedBoxes.length === allBoxes.length);
+            }
+        }
+
+        let isAnalyzingProfiles = false;
+
+        async function handleAnalyzeSelectedProfiles() {
+            if (isAnalyzingProfiles) {
+                return;
             }
 
+            const errorEl = document.getElementById("savedProfilesMsg") || document.getElementById("urlErrorMsg");
+            if (errorEl) errorEl.style.display = "none";
+
+            const commonStart = document.getElementById("commonStartDate")?.value || "";
+            const commonEnd = document.getElementById("commonEndDate")?.value || "";
+
+            // Validate common date range
+            if (commonStart && commonEnd && commonStart > commonEnd) {
+                const msg = "Start Date must be on or before End Date.";
+                if (errorEl) {
+                    errorEl.textContent = msg;
+                    errorEl.style.display = "block";
+                } else {
+                    alert(msg);
+                }
+                return;
+            }
+
+            const cards = document.querySelectorAll(".saved-profile-card");
+            const selectedList = [];
+
+            cards.forEach(card => {
+                const cb = card.querySelector(".profile-select-checkbox");
+                if (cb && cb.checked) {
+                    const url = cb.getAttribute("data-url");
+                    const name = card.querySelector(".saved-profile-name")?.textContent?.trim() || "";
+                    const headline = card.querySelector(".saved-profile-headline")?.textContent?.trim() || "";
+                    const avatar = card.querySelector(".saved-profile-avatar")?.getAttribute("src") || null;
+
+                    selectedList.push({
+                        profile_url: url,
+                        name: name,
+                        headline: headline,
+                        picture: avatar && !avatar.startsWith("data:") ? avatar : null,
+                        startDate: commonStart,
+                        endDate: commonEnd
+                    });
+                }
+            });
+
+            if (selectedList.length === 0) {
+                const msg = "Please select at least one profile to analyze.";
+                if (errorEl) {
+                    errorEl.textContent = msg;
+                    errorEl.style.display = "block";
+                } else {
+                    alert(msg);
+                }
+                return;
+            }
+
+            const btn = document.getElementById("analyzeSelectedProfilesBtn");
+            const againBtns = document.querySelectorAll(".btn-analyze-again");
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = `Analyzing ${selectedList.length} Profile${selectedList.length === 1 ? '' : 's'}...`;
+            }
+            againBtns.forEach(b => b.disabled = true);
+            isAnalyzingProfiles = true;
+
+            // Phase 3 - Issue 7: Multi-profile progress feedback elements
+            const progressCard = document.getElementById("multiProfileProgressCard");
+            const headingEl = document.getElementById("multiProgressHeading");
+            const stepEl = document.getElementById("multiProgressStep");
+            const barEl = document.getElementById("multiProgressBar");
+            const statusTextEl = document.getElementById("multiProgressStatusText");
+            const detailTextEl = document.getElementById("multiProgressDetailText");
+            const logEl = document.getElementById("multiProgressLog");
+            const actionsEl = document.getElementById("multiProgressActions");
+
+            if (progressCard) {
+                progressCard.style.display = "block";
+                if (logEl) { logEl.style.display = "none"; logEl.innerHTML = ""; }
+                if (actionsEl) { actionsEl.style.display = "none"; }
+                if (stepEl) stepEl.textContent = `1 / ${selectedList.length}`;
+                if (barEl) {
+                    barEl.style.backgroundColor = "#0a66c2";
+                    barEl.style.width = `${Math.round(100 / (selectedList.length + 1))}%`;
+                }
+                const firstProf = selectedList[0];
+                if (statusTextEl) {
+                    statusTextEl.textContent = `Analyzing profile 1 of ${selectedList.length}: ${firstProf.name || firstProf.profile_url}...`;
+                }
+                if (detailTextEl) {
+                    detailTextEl.textContent = "Connecting to LinkedIn data feed... Polite spacing is applied to avoid rate limits.";
+                }
+            }
+
+            let currentPIdx = 0;
+            let progressInterval = null;
+            if (selectedList.length > 1 && progressCard) {
+                progressInterval = setInterval(() => {
+                    currentPIdx++;
+                    if (currentPIdx < selectedList.length) {
+                        const prof = selectedList[currentPIdx];
+                        const pct = Math.round(((currentPIdx + 1) / (selectedList.length + 1)) * 100);
+                        if (stepEl) stepEl.textContent = `${currentPIdx + 1} / ${selectedList.length}`;
+                        if (barEl) barEl.style.width = `${pct}%`;
+                        if (statusTextEl) {
+                            statusTextEl.textContent = `Analyzing profile ${currentPIdx + 1} of ${selectedList.length}: ${prof.name || prof.profile_url}...`;
+                        }
+                        if (detailTextEl) {
+                            detailTextEl.textContent = "Waiting between profile requests to avoid LinkedIn rate limits (polite pacing)...";
+                        }
+                    }
+                }, 2500);
+            }
+
+            try {
+                const response = await fetch("/api/analyze", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        profiles: selectedList,
+                        startDate: commonStart,
+                        endDate: commonEnd,
+                        activities: ["all"]
+                    })
+                });
+
+                if (progressInterval) clearInterval(progressInterval);
+
+                const data = await response.json();
+                if (!response.ok) {
+                    throw new Error(data.error || "Analysis of selected profiles failed.");
+                }
+
+                // Update progress UI with complete status and per-profile results
+                if (progressCard) {
+                    if (barEl) barEl.style.width = "100%";
+                    if (stepEl) stepEl.textContent = `${selectedList.length} / ${selectedList.length}`;
+                    if (statusTextEl) {
+                        statusTextEl.textContent = `Analysis complete for ${selectedList.length} profile${selectedList.length === 1 ? '' : 's'}.`;
+                    }
+                    if (detailTextEl) {
+                        detailTextEl.textContent = "All profiles processed successfully. Opening dashboard...";
+                    }
+
+                    if (logEl && data.profile_results && Array.isArray(data.profile_results)) {
+                        logEl.style.display = "block";
+                        data.profile_results.forEach(pr => {
+                            const pName = pr.subject_name || "Profile";
+                            const pActs = pr.total_activities || (pr.activities ? pr.activities.length : 0);
+                            const isHist = Boolean(pr.historical_successful_analysis && (!pr.activities || pr.activities.length === 0));
+                            let icon = "✓";
+                            let desc = `${pActs} activities`;
+                            if (isHist) {
+                                icon = "⚠️";
+                                desc = `Preserved history used (${pr.historical_successful_analysis.total_activities || 0} activities)`;
+                            } else if (pr.status_type === "RATE_LIMITED_999") {
+                                icon = "⚠️";
+                                desc = "Rate limited (999)";
+                            } else if (pActs === 0) {
+                                icon = "ℹ️";
+                                desc = "No public activities found";
+                            }
+                            const logItem = document.createElement("div");
+                            logItem.style.padding = "3px 0";
+                            logItem.style.color = isHist || pr.status_type === "RATE_LIMITED_999" ? "#b45309" : "#334155";
+                            logItem.innerHTML = `<strong>${icon} ${escapeHTML(pName)}:</strong> ${escapeHTML(desc)}`;
+                            logEl.appendChild(logItem);
+                        });
+                    }
+
+                    if (actionsEl) {
+                        actionsEl.style.display = "block";
+                    }
+                }
+
+                try {
+                    sessionStorage.setItem("hasLatestAnalysis", "true");
+                    if (selectedList && selectedList.length === 1) {
+                        sessionStorage.setItem("selectedProfile", JSON.stringify({
+                            name: selectedList[0].name || (data && data.subject_name),
+                            profile_url: selectedList[0].profile_url || (data && data.subject_url),
+                            headline: selectedList[0].headline || (data && data.headline),
+                            source: "saved_profile"
+                        }));
+                    } else if (selectedList && selectedList.length > 1) {
+                        sessionStorage.setItem("selectedProfile", JSON.stringify({
+                            name: `${selectedList.length} Selected Profiles`,
+                            profile_url: "",
+                            headline: "Batch Analysis",
+                            source: "batch"
+                        }));
+                    }
+                    if (data && (!data.activities || data.activities.length <= 100)) {
+                        sessionStorage.setItem("currentAnalysis", JSON.stringify(data));
+                    } else {
+                        sessionStorage.removeItem("currentAnalysis");
+                    }
+                } catch (storageErr) {
+                    console.warn("Storage quota exceeded or restricted; relying on backend /api/analysis/latest", storageErr);
+                    sessionStorage.removeItem("currentAnalysis");
+                }
+
+                setTimeout(() => {
+                    window.location.href = "/dashboard";
+                }, 1000);
+
+            } catch (err) {
+                if (progressInterval) clearInterval(progressInterval);
+                if (progressCard) {
+                    if (barEl) barEl.style.backgroundColor = "#dc2626";
+                    if (statusTextEl) statusTextEl.textContent = "Analysis stopped with an error.";
+                    if (detailTextEl) detailTextEl.textContent = err.message || "Request failed.";
+                }
+                if (errorEl) {
+                    errorEl.textContent = err.message;
+                    errorEl.style.display = "block";
+                }
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = "Analyze Selected Profiles →";
+                }
+                againBtns.forEach(b => b.disabled = false);
+            } finally {
+                isAnalyzingProfiles = false;
+            }
+        }
+
+        async function analyzeSavedProfile(profileUrl) {
             try {
                 const response = await fetch("/api/profile/validate-url", {
                     method: "POST",
@@ -891,10 +1504,12 @@
                 }, 200);
 
             } catch (err) {
-                showError(err.message);
-                if (btn) {
-                    btn.disabled = false;
-                    btn.textContent = "Analyze Profile →";
+                const errorEl = document.getElementById("urlError");
+                if (errorEl) {
+                    errorEl.textContent = err.message;
+                    errorEl.style.display = "block";
+                } else {
+                    alert(err.message);
                 }
             }
         }

@@ -1,9 +1,75 @@
 import csv
 import io
+import re
 import zipfile
+from datetime import date
 from typing import List, Dict, Any, Optional, Tuple
 from models.friend import Friend
 from models.activity import Activity
+
+
+def safe_normalize_date(d_val: Optional[str]) -> Optional[str]:
+    """Converts any valid date format (ISO, US MM/DD/YYYY, EU DD/MM/YYYY, Month names) to YYYY-MM-DD safely."""
+    if not d_val:
+        return None
+    d_clean = str(d_val).strip()
+
+    # 1. ISO format YYYY-MM-DD (also supports YYYY/MM/DD and YYYY.MM.DD)
+    m_iso = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', d_clean)
+    if m_iso:
+        try:
+            return date(int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3))).isoformat()
+        except Exception:
+            pass
+
+    # 2. Slash/Dash/Dot format MM/DD/YYYY or DD/MM/YYYY
+    m_slash = re.search(r'(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})', d_clean)
+    if m_slash:
+        p1, p2, yr = int(m_slash.group(1)), int(m_slash.group(2)), int(m_slash.group(3))
+        # Unambiguous DD/MM/YYYY (first number > 12, second <= 12)
+        if p1 > 12 >= p2:
+            try:
+                return date(yr, p2, p1).isoformat()
+            except Exception:
+                pass
+        # Unambiguous MM/DD/YYYY (second number > 12, first <= 12)
+        elif p2 > 12 >= p1:
+            try:
+                return date(yr, p1, p2).isoformat()
+            except Exception:
+                pass
+        # Ambiguous MM/DD/YYYY vs DD/MM/YYYY (both <= 12)
+        # Default to standard LinkedIn export US format MM/DD/YYYY; if invalid day for month, fallback to DD/MM/YYYY
+        elif p1 <= 12 and p2 <= 12:
+            try:
+                return date(yr, p1, p2).isoformat()
+            except Exception:
+                try:
+                    return date(yr, p2, p1).isoformat()
+                except Exception:
+                    pass
+
+    # 3. Month name formats
+    months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+    m_mon1 = re.search(r'(\d{1,2})\s+(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{4})', d_clean, re.IGNORECASE)
+    if m_mon1:
+        day, mon_str, yr = int(m_mon1.group(1)), m_mon1.group(2).lower()[:3], int(m_mon1.group(3))
+        if mon_str in months:
+            try:
+                return date(yr, months.index(mon_str) + 1, day).isoformat()
+            except Exception:
+                pass
+
+    m_mon2 = re.search(r'(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?,?\s+(\d{4})', d_clean, re.IGNORECASE)
+    if m_mon2:
+        mon_str, day, yr = m_mon2.group(1).lower()[:3], int(m_mon2.group(2)), int(m_mon2.group(3))
+        if mon_str in months:
+            try:
+                return date(yr, months.index(mon_str) + 1, day).isoformat()
+            except Exception:
+                pass
+
+    return None
 
 
 def validate_linkedin_connections_csv(csv_text: str) -> Tuple[bool, str, int]:
@@ -188,11 +254,18 @@ def parse_connections_from_file_or_zip(file_bytes: bytes, filename: str) -> Tupl
     if filename.lower().endswith(".zip") or zipfile.is_zipfile(io.BytesIO(file_bytes)):
         try:
             with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+                # Check ZIP integrity before parsing
+                corrupt_file = zf.testzip()
+                if corrupt_file:
+                    return False, [], f"Corrupted file '{corrupt_file}' encountered in ZIP archive."
+
                 conn_friends = []
                 inv_friends = []
 
                 # 1. Look for Connections.csv
                 for name in zf.namelist():
+                    if ".." in name or name.startswith(("/", "\\")):
+                        continue  # Path traversal protection
                     if "connections.csv" in name.lower():
                         csv_text = zf.read(name).decode("utf-8-sig", errors="replace")
                         is_valid, msg, _ = validate_linkedin_connections_csv(csv_text)
@@ -203,6 +276,8 @@ def parse_connections_from_file_or_zip(file_bytes: bytes, filename: str) -> Tupl
                 # 2. Look for Invitations.csv to include any pending/network contacts
                 existing_names = {f.name.lower() for f in conn_friends}
                 for name in zf.namelist():
+                    if ".." in name or name.startswith(("/", "\\")):
+                        continue  # Path traversal protection
                     if "invitations.csv" in name.lower():
                         csv_text = zf.read(name).decode("utf-8-sig", errors="replace")
                         is_valid, _, _ = validate_linkedin_invitations_csv(csv_text)
@@ -263,25 +338,35 @@ def parse_reactions_csv(csv_text: str) -> List[Activity]:
     activities = []
 
     for idx, row in enumerate(reader):
-        date_str = (row.get("Date") or row.get("date") or "").strip()[:10]
+        raw_d = (row.get("Date") or row.get("date") or "").strip()
+        date_str = safe_normalize_date(raw_d) or raw_d[:10]
         reaction_type = (row.get("Type") or row.get("type") or "LIKE").strip()
         link = (row.get("Link") or row.get("link") or "").strip()
+        clean_link = link.split('?')[0].split('#')[0] if link else None
         if not date_str:
             continue
 
         rx_title = reaction_type.title()
+        is_vid = bool(clean_link and any(v in clean_link.lower() for v in ("/videos/", "urn:li:video:", "youtube.com", "youtu.be", "vimeo.com")))
+        v_url = clean_link if (clean_link and any(v in clean_link.lower() for v in ("youtube.com", "youtu.be", "vimeo.com"))) else None
+        v_stat = "External video embed" if v_url else ("Video detected (Stream protected by LinkedIn, permalink available)" if is_vid else "No video")
         activities.append(Activity(
             id=f"react_{idx+1}",
             date=date_str,
             type="like",
-            text=f"Liked/Reacted ({rx_title}) to LinkedIn post: {link}" if link else f"Liked post ({rx_title})",
+            text=f"Liked/Reacted ({rx_title}) to LinkedIn post: {clean_link or link}" if link else f"Liked post ({rx_title})",
             likes=1,
             comments=0,
             shares=0,
             source="imported",
-            post_content=f"LinkedIn post: {link}" if link else "LinkedIn post",
+            post_content=f"LinkedIn post: {clean_link or link}" if link else "LinkedIn post",
             post_author="Original Post Author",
-            post_url=link or None,
+            post_url=clean_link or None,
+            media_url=None,
+            video_url=v_url,
+            video_thumbnail=None,
+            video_status=v_stat,
+            is_video=is_vid,
             reaction_type=rx_title,
             is_own_post=False,
             action_type="like"
@@ -307,24 +392,34 @@ def parse_comments_csv(csv_text: str) -> List[Activity]:
     activities = []
 
     for idx, row in enumerate(reader):
-        date_str = (row.get("Date") or row.get("date") or "").strip()[:10]
+        raw_d = (row.get("Date") or row.get("date") or "").strip()
+        date_str = safe_normalize_date(raw_d) or raw_d[:10]
         message = (row.get("Message") or row.get("message") or "").strip()
         link = (row.get("Link") or row.get("link") or "").strip()
+        clean_link = link.split('?')[0].split('#')[0] if link else None
         if not date_str:
             continue
 
+        is_vid = bool(clean_link and any(v in clean_link.lower() for v in ("/videos/", "urn:li:video:", "youtube.com", "youtu.be", "vimeo.com")))
+        v_url = clean_link if (clean_link and any(v in clean_link.lower() for v in ("youtube.com", "youtu.be", "vimeo.com"))) else None
+        v_stat = "External video embed" if v_url else ("Video detected (Stream protected by LinkedIn, permalink available)" if is_vid else "No video")
         activities.append(Activity(
             id=f"comm_{idx+1}",
             date=date_str,
             type="comment",
-            text=message or f"Commented on LinkedIn post: {link}",
+            text=message or f"Commented on LinkedIn post: {clean_link or link}",
             likes=0,
             comments=1,
             shares=0,
             source="imported",
-            post_content=f"LinkedIn post: {link}" if link else "LinkedIn post",
+            post_content=f"LinkedIn post: {clean_link or link}" if link else "LinkedIn post",
             post_author="Original Post Author",
-            post_url=link or None,
+            post_url=clean_link or None,
+            media_url=None,
+            video_url=v_url,
+            video_thumbnail=None,
+            video_status=v_stat,
+            is_video=is_vid,
             comment_text=message or None,
             is_own_post=False,
             action_type="comment"
@@ -335,7 +430,7 @@ def parse_comments_csv(csv_text: str) -> List[Activity]:
 
 def parse_shares_csv(csv_text: str) -> List[Activity]:
     """
-    Parses LinkedIn's Shares.csv / Posts.csv (original posts and shares published).
+    Parses LinkedIn's Shares.csv / Posts.csv (original posts, shares, videos published).
     Columns: Date, ShareCommentary, SharedUrl, MediaUrl, Visibility
     """
     lines = csv_text.strip().splitlines()
@@ -350,29 +445,64 @@ def parse_shares_csv(csv_text: str) -> List[Activity]:
     activities = []
 
     for idx, row in enumerate(reader):
-        date_str = (row.get("Date") or row.get("date") or "").strip()[:10]
+        raw_d = (row.get("Date") or row.get("date") or "").strip()
+        date_str = safe_normalize_date(raw_d) or raw_d[:10]
         commentary = (row.get("ShareCommentary") or row.get("sharecommentary") or row.get("text") or "").strip()
-        url = (row.get("SharedUrl") or row.get("sharedurl") or "").strip()
+        url = (row.get("SharedUrl") or row.get("sharedurl") or row.get("ShareLink") or row.get("sharelink") or row.get("Link") or row.get("link") or "").strip()
         media_url = (row.get("MediaUrl") or row.get("mediaurl") or "").strip()
         if not date_str:
             continue
 
-        is_video = "video" in (media_url or "").lower() or "video" in commentary.lower()
-        act_type = "video" if is_video else "post"
+        clean_url = url.split('?')[0].split('#')[0] if url else None
+        clean_media = media_url.split('?')[0] if media_url else None
+
+        # Video detection: check genuine video URL extensions / video hosts without false-positiving on commentary words or generic post URNs
+        is_video = bool(
+            (clean_media and any(ext in clean_media.lower() for ext in (".mp4", ".mov", ".webm", ".m4v", "videocdn", "/video/", "dms/video/", "urn:li:video:"))) or
+            (clean_url and (
+                any(v_host in clean_url.lower() for v_host in ("youtube.com/watch", "youtu.be/", "vimeo.com/", "linkedin.com/video/")) or
+                "urn:li:video:" in clean_url.lower()
+            ))
+        )
+
+        # Share / Repost detection: commentary explicitly starting with Reposted/Shared or sharing someone else's post
+        is_share = (
+            not is_video and (
+                commentary.lower().startswith(("reposted", "shared")) or
+                ("reposted this" in commentary.lower()) or
+                (clean_url and "linkedin.com/posts/" in clean_url.lower() and not commentary)
+            )
+        )
+
+        if is_video:
+            act_type = "video"
+        elif is_share:
+            act_type = "share"
+        else:
+            act_type = "post"
+
+        v_url = clean_media if (clean_media and any(ext in clean_media.lower() for ext in (".mp4", ".mov", ".webm", ".m4v", "videocdn", "/video/", "dms/video/"))) else None
+        if not v_url and clean_url and any(v_host in clean_url.lower() for v_host in ("youtube.com", "youtu.be", "vimeo.com")):
+            v_url = clean_url
+        v_status = "Video stream extracted" if v_url else ("Video detected in export" if is_video else "No video")
 
         activities.append(Activity(
             id=f"share_{idx+1}",
             date=date_str,
             type=act_type,
-            text=commentary or url or "Published update on LinkedIn",
+            text=commentary or clean_url or "Published update on LinkedIn",
             likes=0,
             comments=0,
-            shares=1,
+            shares=0,
             source="imported",
-            post_content=commentary or url or "Published update on LinkedIn",
+            post_content=commentary or clean_url or "Published update on LinkedIn",
             post_author=None,
-            post_url=url or None,
-            media_url=media_url or None,
+            post_url=clean_url or None,
+            media_url=clean_media or None,
+            video_url=v_url,
+            video_thumbnail=None,
+            video_status=v_status,
+            is_video=is_video,
             is_own_post=True,
             action_type=act_type
         ))
@@ -406,9 +536,10 @@ def parse_activities_csv(csv_text: str) -> List[Activity]:
 
     activities = []
     for idx, row in enumerate(reader):
-        raw_date = (row.get(date_col) or "").strip()[:10]
+        raw_date_str = (row.get(date_col) or "").strip()
+        norm_date = safe_normalize_date(raw_date_str) or raw_date_str[:10]
         raw_type = (row.get(type_col) or "").strip().lower()
-        if not raw_date or not raw_type:
+        if not norm_date or not raw_type:
             continue
 
         raw_type = raw_type[:-1] if raw_type.endswith("s") else raw_type
@@ -421,14 +552,15 @@ def parse_activities_csv(csv_text: str) -> List[Activity]:
 
         act_text = (row.get(normalized_fields.get("text", "text")) or "").strip()
         p_content = (row.get(normalized_fields.get("post_content", "post_content")) or act_text).strip()
-        p_url = (row.get(normalized_fields.get("post_url", "post_url")) or row.get(normalized_fields.get("link", "link")) or "").strip()
+        raw_p_url = (row.get(normalized_fields.get("post_url", "post_url")) or row.get(normalized_fields.get("link", "link")) or "").strip()
+        p_url = raw_p_url.split('?')[0].split('#')[0] if raw_p_url else None
         p_author = (row.get(normalized_fields.get("post_author", "post_author")) or "").strip()
         c_text = (row.get(normalized_fields.get("comment_text", "comment_text")) or "").strip()
         r_type = (row.get(normalized_fields.get("reaction_type", "reaction_type")) or "").strip()
 
         activities.append(Activity(
             id=f"imported_act_{idx+1}",
-            date=raw_date,
+            date=norm_date,
             type=raw_type,
             text=act_text,
             likes=safe_int(row.get(normalized_fields.get("likes", "likes"))),
@@ -448,25 +580,41 @@ def parse_activities_csv(csv_text: str) -> List[Activity]:
 
 
 def parse_activities_from_file_or_zip(file_bytes: bytes, filename: str) -> List[Activity]:
-    """Parses activities from any official LinkedIn CSV or complete export ZIP."""
+    """Parses activities from any official LinkedIn CSV or complete export ZIP with cross-file deduplication."""
     if filename.lower().endswith(".zip") or zipfile.is_zipfile(io.BytesIO(file_bytes)):
         all_activities = []
+        seen_keys = set()
         try:
             with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+                # Check ZIP integrity before parsing
+                corrupt_file = zf.testzip()
+                if corrupt_file:
+                    return []
+
                 for name in zf.namelist():
+                    if ".." in name or name.startswith(("/", "\\")):
+                        continue  # Path traversal protection
                     lower = name.lower()
+                    file_acts: List[Activity] = []
                     if "reactions.csv" in lower:
                         txt = zf.read(name).decode("utf-8-sig", errors="replace")
-                        all_activities.extend(parse_reactions_csv(txt))
+                        file_acts = parse_reactions_csv(txt)
                     elif "comments.csv" in lower:
                         txt = zf.read(name).decode("utf-8-sig", errors="replace")
-                        all_activities.extend(parse_comments_csv(txt))
+                        file_acts = parse_comments_csv(txt)
                     elif "shares.csv" in lower or "posts.csv" in lower:
                         txt = zf.read(name).decode("utf-8-sig", errors="replace")
-                        all_activities.extend(parse_shares_csv(txt))
+                        file_acts = parse_shares_csv(txt)
                     elif "activities.csv" in lower:
                         txt = zf.read(name).decode("utf-8-sig", errors="replace")
-                        all_activities.extend(parse_activities_csv(txt))
+                        file_acts = parse_activities_csv(txt)
+
+                    for act in file_acts:
+                        p_url = (act.post_url or "").split('?')[0].split('#')[0]
+                        dedup_key = f"{act.type}_{act.date}_{p_url or (act.text or '')[:40]}"
+                        if dedup_key not in seen_keys:
+                            seen_keys.add(dedup_key)
+                            all_activities.append(act)
         except Exception:
             return all_activities
         return all_activities

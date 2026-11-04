@@ -5,6 +5,36 @@
  * full-dataset searching, pagination for large sets, and selecting connections for analysis.
  */
 
+function formatDateDDMMYY(dateInput) {
+    if (!dateInput) return "";
+    if (dateInput instanceof Date) {
+        if (isNaN(dateInput.getTime())) return "";
+        const dd = String(dateInput.getDate()).padStart(2, "0");
+        const mm = String(dateInput.getMonth() + 1).padStart(2, "0");
+        const yy = String(dateInput.getFullYear()).slice(-2);
+        return `${dd}/${mm}/${yy}`;
+    }
+    const s = String(dateInput).trim();
+    if (!s) return "";
+    if (/^\d{2}\/\d{2}\/\d{2}$/.test(s)) return s;
+    const mDmy4 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    if (mDmy4) {
+        return `${mDmy4[1].padStart(2, "0")}/${mDmy4[2].padStart(2, "0")}/${mDmy4[3].slice(-2)}`;
+    }
+    const mIso = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    if (mIso) {
+        return `${mIso[3].padStart(2, "0")}/${mIso[2].padStart(2, "0")}/${mIso[1].slice(-2)}`;
+    }
+    const parsed = new Date(s);
+    if (!isNaN(parsed.getTime())) {
+        const dd = String(parsed.getDate()).padStart(2, "0");
+        const mm = String(parsed.getMonth() + 1).padStart(2, "0");
+        const yy = String(parsed.getFullYear()).slice(-2);
+        return `${dd}/${mm}/${yy}`;
+    }
+    return s;
+}
+
 let selectedConnection = null;
 let currentProfile = null;
 let selfProfileData = null;
@@ -56,8 +86,8 @@ async function loadUserProfile() {
         }
 
         if (avatarEl) {
-            if (data.picture) {
-                avatarEl.innerHTML = `<img src="${data.picture}" alt="Profile Photo">`;
+            if (data.picture && isSafeImageUrl(data.picture)) {
+                avatarEl.innerHTML = `<img src="${escapeAttr(data.picture)}" alt="Profile Photo">`;
             } else {
                 avatarEl.textContent = (data.name || "U").charAt(0).toUpperCase();
             }
@@ -168,8 +198,8 @@ function renderPage() {
         const selfCard = document.createElement("div");
         selfCard.className = "friend-card primary-card";
         const selfInitial = (selfProfileData.name || "U").charAt(0).toUpperCase();
-        const selfAvatarHTML = selfProfileData.picture
-            ? `<img src="${selfProfileData.picture}" alt="${escapeHTML(selfProfileData.name)}">`
+        const selfAvatarHTML = (selfProfileData.picture && isSafeImageUrl(selfProfileData.picture))
+            ? `<img src="${escapeAttr(selfProfileData.picture)}" alt="${escapeAttr(selfProfileData.name)}">`
             : selfInitial;
 
         selfCard.innerHTML = `
@@ -179,7 +209,7 @@ function renderPage() {
             <div class="friend-avatar">${selfAvatarHTML}</div>
             <h3>${escapeHTML(selfProfileData.name)} (You)</h3>
             <p class="headline">${escapeHTML(selfProfileData.headline || "Authenticated LinkedIn Account")}</p>
-            <button class="select-btn select-primary" onclick="selectConnection('${selfProfileData.id}', '${escapeQuotes(selfProfileData.name)}', 'real_linkedin', this)">
+            <button class="select-btn select-primary" onclick="selectConnection('${selfProfileData.id}', '${escapeQuotes(selfProfileData.name)}', 'real_linkedin', this, '${escapeQuotes(selfProfileData.profile_url || selfProfileData.url || '')}', '${escapeQuotes(selfProfileData.headline || '')}', '${escapeQuotes(selfProfileData.picture || '')}')">
                 Analyze My Profile
             </button>
         `;
@@ -233,9 +263,9 @@ function renderPage() {
         let avatarHTML = "";
         let avatarNoteHTML = "";
 
-        if (conn.picture && (conn.picture.startsWith("http://") || conn.picture.startsWith("https://"))) {
+        if (conn.picture && isSafeImageUrl(conn.picture)) {
             // Valid legitimate photo URL from data
-            avatarHTML = `<div class="friend-avatar"><img src="${escapeHTML(conn.picture)}" alt="${escapeHTML(conn.name)}" onerror="this.onerror=null; this.parentElement.style.background='${avatarBg}'; this.parentElement.innerHTML='${initials}';"></div>`;
+            avatarHTML = `<div class="friend-avatar"><img src="${escapeAttr(conn.picture)}" alt="${escapeAttr(conn.name)}" onerror="this.onerror=null; this.parentElement.style.background='${avatarBg}'; this.parentElement.innerHTML='${initials}';"></div>`;
         } else {
             // Clean initials fallback with distinct deterministic color
             avatarHTML = `<div class="friend-avatar" style="background:${avatarBg};">${initials}</div>`;
@@ -263,7 +293,7 @@ function renderPage() {
             metaHTML += `<span>Position: <strong>${escapeHTML(conn.position)}</strong></span>`;
         }
         if (conn.connected_on) {
-            metaHTML += `<span>Connected on: <strong>${escapeHTML(conn.connected_on)}</strong></span>`;
+            metaHTML += `<span>Connected on: <strong>${escapeHTML(formatDateDDMMYY(conn.connected_on))}</strong></span>`;
         }
         if (conn.profile_url) {
             metaHTML += `<a href="${escapeHTML(conn.profile_url)}" target="_blank" rel="noopener noreferrer">View LinkedIn Profile ↗</a>`;
@@ -279,7 +309,7 @@ function renderPage() {
             <h3>${escapeHTML(conn.name)}</h3>
             <p class="headline">${escapeHTML(headlineText)}</p>
             ${metaHTML ? `<div class="meta-details">${metaHTML}</div>` : ""}
-            <button class="select-btn" onclick="selectConnection('${conn.id}', '${escapeQuotes(conn.name)}', 'imported', this)" style="${isSelected ? 'background:#218838;' : ''}">
+            <button class="select-btn" onclick="selectConnection('${conn.id}', '${escapeQuotes(conn.name)}', 'imported', this, '${escapeQuotes(conn.profile_url || conn.url || '')}', '${escapeQuotes(headlineText || '')}', '${escapeQuotes(conn.picture || '')}')" style="${isSelected ? 'background:#218838;' : ''}">
                 ${isSelected ? 'Selected ✓' : 'Select Connection'}
             </button>
         `;
@@ -354,13 +384,69 @@ function searchFriends() {
     renderPage();
 }
 
-function selectConnection(id, name, source, btnElement) {
-    selectedConnection = { id, name, source };
+function selectConnection(id, name, source, btnElement, optUrl, optHeadline, optPicture) {
+    let profileUrl = (optUrl || "").trim();
+    let headline = (optHeadline || "").trim();
+    let picture = (optPicture || "").trim();
+
+    // If profileUrl not provided directly in button handler, resolve from loaded records
+    if (!profileUrl && source === "real_linkedin") {
+        if (selfProfileData) {
+            profileUrl = (selfProfileData.profile_url || selfProfileData.url || "").trim();
+            headline = headline || (selfProfileData.headline || "Authenticated LinkedIn Account");
+            picture = picture || (selfProfileData.picture || "");
+        }
+        if (!profileUrl) {
+            const sName = name || (selfProfileData && selfProfileData.name) || "";
+            const sSlug = sName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+            if (sSlug) profileUrl = `https://www.linkedin.com/in/${sSlug}`;
+        }
+    } else if (!profileUrl && Array.isArray(allRealConnections)) {
+        const found = allRealConnections.find(c => c && c.id === id);
+        if (found) {
+            profileUrl = (found.profile_url || found.url || "").trim();
+            headline = headline || found.headline || found.position || (found.company ? `At ${found.company}` : "");
+            picture = picture || (found.picture || "");
+        }
+    }
+
+    selectedConnection = { id, name, source, profile_url: profileUrl, headline: headline, picture: picture };
 
     // Persist choice for Activity Filter & Dashboard
     localStorage.setItem("selectedSubjectId", id);
     localStorage.setItem("selectedFriend", name);
     localStorage.setItem("selectedSource", source);
+    if (profileUrl) {
+        localStorage.setItem("selectedProfileUrl", profileUrl);
+    } else {
+        localStorage.removeItem("selectedProfileUrl");
+    }
+    if (headline) {
+        localStorage.setItem("selectedHeadline", headline);
+    } else {
+        localStorage.removeItem("selectedHeadline");
+    }
+    if (picture) {
+        localStorage.setItem("selectedPicture", picture);
+    } else {
+        localStorage.removeItem("selectedPicture");
+    }
+
+    // Persist complete selected profile identity in sessionStorage
+    sessionStorage.setItem("selectedProfile", JSON.stringify({
+        id: id,
+        subject_id: id,
+        name: name,
+        profile_url: profileUrl,
+        headline: headline || "LinkedIn Connection",
+        picture: picture,
+        source: source
+    }));
+
+    // Clear stale analysis data when a different profile is selected so the dashboard never displays another profile's data
+    sessionStorage.removeItem("currentAnalysis");
+    sessionStorage.removeItem("hasLatestAnalysis");
+    localStorage.removeItem("activityFilter");
 
     // Update all card borders and buttons
     const allCards = document.querySelectorAll(".friend-card");
@@ -469,6 +555,13 @@ async function clearAllConnections() {
             localStorage.removeItem("selectedSubjectId");
             localStorage.removeItem("selectedFriend");
             localStorage.removeItem("selectedSource");
+            localStorage.removeItem("selectedProfileUrl");
+            localStorage.removeItem("selectedHeadline");
+            localStorage.removeItem("selectedPicture");
+            localStorage.removeItem("activityFilter");
+            sessionStorage.removeItem("selectedProfile");
+            sessionStorage.removeItem("currentAnalysis");
+            sessionStorage.removeItem("hasLatestAnalysis");
             const continueBtn = document.getElementById("continueBtn");
             if (continueBtn) continueBtn.style.display = "none";
             await loadConnections();
@@ -487,6 +580,16 @@ async function deleteConnection(connId, event) {
         if (res.ok) {
             if (selectedConnection && selectedConnection.id === connId) {
                 selectedConnection = null;
+                localStorage.removeItem("selectedSubjectId");
+                localStorage.removeItem("selectedFriend");
+                localStorage.removeItem("selectedSource");
+                localStorage.removeItem("selectedProfileUrl");
+                localStorage.removeItem("selectedHeadline");
+                localStorage.removeItem("selectedPicture");
+                localStorage.removeItem("activityFilter");
+                sessionStorage.removeItem("selectedProfile");
+                sessionStorage.removeItem("currentAnalysis");
+                sessionStorage.removeItem("hasLatestAnalysis");
                 const continueBtn = document.getElementById("continueBtn");
                 if (continueBtn) continueBtn.style.display = "none";
             }
@@ -533,4 +636,21 @@ function escapeHTML(str) {
         .replace(/&/g, "&amp;")
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;");
+}
+
+function escapeAttr(str) {
+    if (!str) return "";
+    return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+}
+
+function isSafeImageUrl(url) {
+    if (!url || typeof url !== "string") return false;
+    const trimmed = url.trim().toLowerCase();
+    // Allow https://, http://, and relative paths starting with / (excluding protocol-relative //)
+    return trimmed.startsWith("https://") || trimmed.startsWith("http://") || (trimmed.startsWith("/") && !trimmed.startsWith("//"));
 }

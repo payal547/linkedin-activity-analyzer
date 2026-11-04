@@ -1,3 +1,4 @@
+import re
 import uuid
 from flask import Blueprint, session, jsonify, request
 from auth.token_store import get_access_token
@@ -45,11 +46,15 @@ def connections():
         if not access_token:
             access_token = session.get("linkedin_access_token")
         api_available, api_connections, api_message = fetch_linkedin_connections(access_token)
+        raw_name = raw_profile.get("name", "").strip()
+        slug = re.sub(r'[^a-zA-Z0-9_\-]', '', raw_name.lower().replace(' ', '-'))
+        self_url = raw_profile.get("profile_url") or raw_profile.get("url") or (f"https://www.linkedin.com/in/{slug}" if slug else "")
         self_profile = {
             "id": raw_profile.get("sub", "self"),
             "name": raw_profile.get("name", "My Profile"),
             "headline": "Authenticated LinkedIn Account",
             "picture": raw_profile.get("picture"),
+            "profile_url": self_url,
             "source": "real_linkedin",
             "is_self": True
         }
@@ -131,8 +136,18 @@ def import_connections():
     if not upload or not upload.filename:
         return jsonify({"error": "Please select a Connections.csv or LinkedIn export ZIP file."}), 400
 
+    import os
+    max_upload_mb = int(os.getenv("MAX_UPLOAD_SIZE_MB", "100"))
+    max_upload_bytes = max_upload_mb * 1024 * 1024
+
+    if request.content_length and request.content_length > max_upload_bytes:
+        return jsonify({"error": f"Uploaded file exceeds the maximum allowed size of {max_upload_mb} MB."}), 400
+
     try:
-        file_bytes = upload.stream.read(15 * 1024 * 1024)
+        file_bytes = upload.stream.read(max_upload_bytes + 1)
+        if len(file_bytes) > max_upload_bytes:
+            return jsonify({"error": f"Uploaded file exceeds the maximum allowed size of {max_upload_mb} MB."}), 400
+
         success, friends, message = parse_connections_from_file_or_zip(file_bytes, upload.filename)
         if not success or not friends:
             return jsonify({
@@ -141,7 +156,6 @@ def import_connections():
 
         serialized = [f.to_dict() for f in friends]
         saved = save_all_connections(serialized)
-        session["imported_connections"] = serialized
 
         return jsonify({
             "message": message or f"Successfully loaded {len(serialized)} real connections from your LinkedIn export!",

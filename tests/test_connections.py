@@ -184,6 +184,30 @@ Bob,Builder,https://linkedin.com/in/bob,,BuildCo,Builder,02 Jan 2026,
         self.assertEqual(parsed[0].picture, "https://media.licdn.com/dms/image/alice.jpg")
         self.assertIsNone(parsed[1].picture)
 
+    def test_import_oversized_file_rejected(self):
+        """Verify that uploading files exceeding MAX_UPLOAD_SIZE_MB returns HTTP 400."""
+        with patch.dict("os.environ", {"MAX_UPLOAD_SIZE_MB": "1"}):
+            # Create dummy data slightly over 1MB
+            oversized = b"A" * (1024 * 1024 + 50)
+            data = {
+                "file": (io.BytesIO(oversized), "huge.zip")
+            }
+            response = self.client.post("/api/connections/import", data=data, content_type="multipart/form-data")
+            self.assertEqual(response.status_code, 400)
+            res_data = response.get_json()
+            self.assertIn("exceeds the maximum allowed size", res_data.get("error", ""))
+
+    def test_import_corrupted_zip_rejected(self):
+        """Verify that a corrupted ZIP archive is rejected safely."""
+        corrupted_bytes = b"PK\x03\x04corrupted_header_data_not_valid_zip"
+        data = {
+            "file": (io.BytesIO(corrupted_bytes), "corrupt.zip")
+        }
+        response = self.client.post("/api/connections/import", data=data, content_type="multipart/form-data")
+        self.assertEqual(response.status_code, 400)
+        res_data = response.get_json()
+        self.assertIn("error", res_data)
+
 
 if __name__ == "__main__":
     unittest.main()

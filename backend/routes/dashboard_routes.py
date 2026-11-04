@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, session
+from services.analysis_storage import load_latest_analysis
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -7,7 +8,7 @@ dashboard_bp = Blueprint("dashboard", __name__)
 def summary():
     """Returns dashboard summary state."""
     profile = session.get("linkedin_profile")
-    analysis = session.get("latest_analysis")
+    analysis = session.get("latest_analysis") or load_latest_analysis()
     return jsonify({
         "connected": bool(profile),
         "profile": profile,

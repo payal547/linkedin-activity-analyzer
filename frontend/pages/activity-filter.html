@@ -215,6 +215,59 @@
             box-shadow: 0 0 0 3px rgba(10, 102, 194, 0.15);
         }
 
+        .date-input-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .date-text-input {
+            width: 100%;
+            padding: 10px 42px 10px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            font-size: 14px;
+            color: #1e293b;
+            background: white;
+            font-family: inherit;
+        }
+
+        .date-text-input:focus {
+            outline: none;
+            border-color: #0a66c2;
+            box-shadow: 0 0 0 3px rgba(10, 102, 194, 0.15);
+        }
+
+        .calendar-btn {
+            position: absolute;
+            right: 6px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 6px 8px;
+            font-size: 16px;
+            line-height: 1;
+            color: #475569;
+            border-radius: 4px;
+            transition: background 0.15s ease, color 0.15s ease;
+        }
+
+        .calendar-btn:hover {
+            background: #f1f5f9;
+            color: #0a66c2;
+        }
+
+        .hidden-native-picker {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+            border: 0;
+            padding: 0;
+            margin: 0;
+        }
+
         /* Activity Types */
         .activities-grid {
             display: grid;
@@ -353,7 +406,9 @@
                 <button type="button" class="preset-btn" onclick="applyDatePreset('all')">All Dates</button>
                 <button type="button" class="preset-btn" onclick="applyDatePreset('today')">Today</button>
                 <button type="button" class="preset-btn" onclick="applyDatePreset('7days')">Last 7 Days</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('10days')">Last 10 Days</button>
                 <button type="button" class="preset-btn active" onclick="applyDatePreset('30days')">Last 30 Days</button>
+                <button type="button" class="preset-btn" id="customPresetBtn" onclick="applyDatePreset('custom')">Custom Range</button>
             </div>
 
             <!-- Radio option for compatibility with existing tests expecting input[value="30days"] -->
@@ -361,17 +416,27 @@
                 <input type="radio" name="dateType" value="30days" checked>
                 <input type="radio" name="dateType" value="current">
                 <input type="radio" name="dateType" value="7days">
+                <input type="radio" name="dateType" value="10days">
+                <input type="radio" name="dateType" value="custom">
                 <input type="radio" name="dateType" value="range">
             </div>
 
             <div class="date-inputs-row">
                 <div class="date-field">
-                    <label for="startDate">From Date</label>
-                    <input type="date" id="startDate">
+                    <label for="startDate">From Date (DD/MM/YYYY)</label>
+                    <div class="date-input-container">
+                        <input type="text" id="startDate" placeholder="DD/MM/YYYY" maxlength="10" autocomplete="off" class="date-text-input">
+                        <button type="button" class="calendar-btn" onclick="triggerCalendarPicker('startDate')" title="Open calendar" aria-label="Open From Date calendar">📅</button>
+                        <input type="date" id="startDate_native" tabindex="-1" class="hidden-native-picker" onchange="onNativeDatePicked('startDate', this.value)">
+                    </div>
                 </div>
                 <div class="date-field">
-                    <label for="endDate">To Date</label>
-                    <input type="date" id="endDate">
+                    <label for="endDate">To Date (DD/MM/YYYY)</label>
+                    <div class="date-input-container">
+                        <input type="text" id="endDate" placeholder="DD/MM/YYYY" maxlength="10" autocomplete="off" class="date-text-input">
+                        <button type="button" class="calendar-btn" onclick="triggerCalendarPicker('endDate')" title="Open calendar" aria-label="Open To Date calendar">📅</button>
+                        <input type="date" id="endDate_native" tabindex="-1" class="hidden-native-picker" onchange="onNativeDatePicked('endDate', this.value)">
+                    </div>
                 </div>
             </div>
         </div>

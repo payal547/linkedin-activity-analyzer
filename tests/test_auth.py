@@ -55,6 +55,37 @@ class TestAuth(unittest.TestCase):
             self.assertNotIn("linkedin_profile", sess)
             self.assertNotIn("linkedin_access_token", sess)
 
+    def test_session_status_preserves_legitimate_oauth_session(self):
+        # A real OAuth user logged in (e.g. Jane Doe)
+        with self.client.session_transaction() as sess:
+            sess["linkedin_profile"] = {
+                "name": "Jane Doe",
+                "email": "jane.doe@example.com",
+                "headline": "Senior Software Architect",
+                "picture": "https://media.licdn.com/dms/image/jane.jpg"
+            }
+            sess["linkedin_access_token"] = "real_oauth_token_jane"
+
+        response = self.client.get("/api/auth/session-status")
+        self.assertEqual(response.status_code, 200)
+        data = response.get_json()
+        self.assertTrue(data.get("authenticated"))
+        self.assertEqual(data.get("name"), "Jane Doe")
+        self.assertEqual(data.get("headline"), "Senior Software Architect")
+        self.assertEqual(data.get("picture"), "https://media.licdn.com/dms/image/jane.jpg")
+        self.assertEqual(data.get("account_type"), "LinkedIn Account")
+        # Must not be overwritten by Aniket Pal
+        self.assertNotEqual(data.get("name"), "Aniket Pal")
+
+    def test_session_status_does_not_activate_in_production(self):
+        # In production mode without an active session, test account must NOT auto-initialize
+        with patch.dict("os.environ", {"APP_ENV": "production"}):
+            with patch.dict(app.config, {"TESTING": False}):
+                response = self.client.get("/api/auth/session-status")
+                self.assertEqual(response.status_code, 401)
+                data = response.get_json()
+                self.assertFalse(data.get("authenticated"))
+
 
 if __name__ == "__main__":
     unittest.main()

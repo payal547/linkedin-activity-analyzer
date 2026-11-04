@@ -121,6 +121,12 @@
             color: #92400e;
         }
 
+        .badge-historical {
+            background: #fef3c7;
+            color: #92400e;
+            border: 1px solid #fcd34d;
+        }
+
         .date-range-text {
             color: #64748b;
             font-weight: 500;
@@ -258,6 +264,388 @@
             display: flex;
             flex-direction: column;
             gap: 18px;
+        }
+
+        /* Multi-Profile Sections */
+        .profile-section-divider {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.05);
+            border: 1px solid #e1e9ee;
+            margin-bottom: 24px;
+            overflow: hidden;
+        }
+
+        .profile-section-header {
+            padding: 18px 24px;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border-bottom: 1.5px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
+        }
+
+        .profile-section-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .profile-section-avatar {
+            width: 52px;
+            height: 52px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #0a66c2;
+            background: #e2e8f0;
+        }
+
+        .profile-section-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .profile-section-headline {
+            font-size: 13px;
+            color: #475569;
+            margin-top: 2px;
+        }
+
+        .profile-section-meta {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 4px;
+            flex-wrap: wrap;
+        }
+
+        .profile-section-badge {
+            font-size: 11px;
+            font-weight: 700;
+            background: #e0f2fe;
+            color: #0369a1;
+            padding: 3px 9px;
+            border-radius: 12px;
+            border: 1px solid #bae6fd;
+        }
+
+        .profile-section-feed {
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 18px;
+        }
+
+        /* LinkedIn-style Post Card */
+        .feed-post-card {
+            background: white;
+            border-radius: 10px;
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            transition: box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+
+        .feed-post-card:hover {
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
+            border-color: #cbd5e1;
+        }
+
+        .feed-context-bar {
+            padding: 10px 18px;
+            background: #f8fafc;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 12px;
+            font-weight: 600;
+            color: #475569;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .feed-context-bar strong {
+            color: #0f172a;
+        }
+
+        .feed-post-header {
+            padding: 14px 18px 10px 18px;
+            display: flex;
+            align-items: flex-start;
+            gap: 12px;
+        }
+
+        .feed-author-avatar {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 1px solid #cbd5e1;
+            background: #f1f5f9;
+            flex-shrink: 0;
+        }
+
+        .feed-author-meta {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .feed-author-name {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+            line-height: 1.3;
+        }
+
+        .feed-author-headline {
+            font-size: 12px;
+            color: #64748b;
+            line-height: 1.3;
+            margin-top: 1px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .feed-post-date {
+            font-size: 11px;
+            color: #94a3b8;
+            margin-top: 2px;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .feed-user-comment {
+            margin: 0 18px 12px 18px;
+            background: #f8fafc;
+            border-left: 3.5px solid #0a66c2;
+            padding: 10px 14px;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #1e293b;
+        }
+
+        .feed-user-comment-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #0a66c2;
+            margin-bottom: 4px;
+        }
+
+        .feed-user-comment-text {
+            font-style: italic;
+            line-height: 1.4;
+        }
+
+        .feed-post-text {
+            padding: 0 18px 14px 18px;
+            font-size: 14px;
+            line-height: 1.55;
+            color: #1e293b;
+            white-space: pre-wrap;
+            word-break: break-word;
+        }
+
+        .content-unavailable-note {
+            color: #64748b;
+            font-style: italic;
+            font-size: 13px;
+            background: #f8fafc;
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px dashed #cbd5e1;
+            display: inline-block;
+        }
+
+        /* AI Sentiment & Tone Analysis Styling */
+        .ai-analysis-box {
+            margin: 0 18px 14px 18px;
+            background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+            border: 1px solid #e2e8f0;
+            border-left: 3.5px solid #0a66c2;
+            border-radius: 8px;
+            padding: 10px 14px;
+        }
+
+        .ai-analysis-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: #0a66c2;
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ai-analysis-metrics {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            flex-wrap: wrap;
+            font-size: 13px;
+            color: #1e293b;
+        }
+
+        .ai-metric-line {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .ai-sentiment-badge {
+            font-size: 12px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 12px;
+            display: inline-block;
+        }
+
+        .ai-sentiment-badge.sentiment-positive {
+            background: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+        }
+
+        .ai-sentiment-badge.sentiment-negative {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+        }
+
+        .ai-sentiment-badge.sentiment-neutral {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+        }
+
+        .ai-sentiment-badge.sentiment-not-available,
+        .ai-sentiment-badge.sentiment-analysis-unavailable {
+            background: #f8fafc;
+            color: #64748b;
+            border: 1px dashed #cbd5e1;
+            font-weight: 500;
+        }
+
+        .ai-tone-badge {
+            font-size: 12px;
+            font-weight: 700;
+            padding: 2px 9px;
+            border-radius: 12px;
+            background: #ede9fe;
+            color: #5b21b6;
+            border: 1px solid #ddd6fe;
+            display: inline-block;
+        }
+
+        .ai-comment-analysis {
+            margin-top: 8px;
+            padding-top: 8px;
+            border-top: 1px dashed #cbd5e1;
+        }
+
+        .ai-comment-analysis-title {
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #0a66c2;
+            margin-bottom: 4px;
+        }
+
+        .feed-post-media {
+            background: #f1f5f9;
+            max-height: 420px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            border-top: 1px solid #f1f5f9;
+            border-bottom: 1px solid #f1f5f9;
+        }
+
+        .feed-post-media img {
+            width: 100%;
+            height: auto;
+            max-height: 420px;
+            object-fit: cover;
+        }
+
+        .feed-engagement-counts {
+            padding: 8px 18px;
+            font-size: 12px;
+            color: #64748b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #edf2f7;
+        }
+
+        .feed-post-actions-bar {
+            padding: 8px 18px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 8px;
+            background: #ffffff;
+        }
+
+        .feed-social-buttons {
+            display: flex;
+            gap: 4px;
+            align-items: center;
+        }
+
+        .social-btn {
+            background: transparent;
+            border: none;
+            color: #475569;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            cursor: default;
+        }
+
+        .btn-open-linkedin {
+            background: #0a66c2;
+            color: white;
+            text-decoration: none;
+            padding: 7px 14px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: background 0.15s ease;
+        }
+
+        .btn-open-linkedin:hover {
+            background: #004182;
+            color: white;
+        }
+
+        .btn-open-linkedin.disabled {
+            background: #cbd5e1;
+            color: #64748b;
+            cursor: not-allowed;
+            pointer-events: none;
         }
 
         /* Actual Post Cards */
@@ -460,6 +848,188 @@
                 grid-template-columns: 1fr;
             }
         }
+
+        /* --- Video Post Component Styles (Part 1) --- */
+        .feed-post-video-container {
+            background: #0f172a;
+            border-radius: 8px;
+            overflow: hidden;
+            margin: 0 18px 14px 18px;
+            border: 1px solid #1e293b;
+            position: relative;
+        }
+
+        .feed-post-video-player video {
+            width: 100%;
+            max-height: 440px;
+            display: block;
+            background: #000;
+        }
+
+        .feed-post-video-poster {
+            position: relative;
+            cursor: pointer;
+            overflow: hidden;
+            max-height: 420px;
+            background: #000;
+        }
+
+        .feed-post-video-poster img {
+            width: 100%;
+            height: auto;
+            max-height: 420px;
+            object-fit: cover;
+            display: block;
+            transition: transform 0.25s ease;
+        }
+
+        .feed-post-video-poster:hover img {
+            transform: scale(1.02);
+        }
+
+        .video-play-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.35);
+            transition: background 0.2s ease;
+        }
+
+        .feed-post-video-poster:hover .video-play-overlay {
+            background: rgba(0, 0, 0, 0.45);
+        }
+
+        .video-play-button {
+            width: 64px;
+            height: 64px;
+            background: rgba(10, 102, 194, 0.9);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.4);
+            transition: transform 0.2s ease, background 0.2s ease;
+        }
+
+        .feed-post-video-poster:hover .video-play-button {
+            transform: scale(1.1);
+            background: #0a66c2;
+        }
+
+        .feed-post-video-placeholder {
+            padding: 30px 20px;
+            text-align: center;
+            background: #f8fafc;
+            color: #475569;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .video-placeholder-icon {
+            font-size: 36px;
+            margin-bottom: 8px;
+        }
+
+        .video-placeholder-title {
+            font-size: 15px;
+            font-weight: 700;
+            color: #0f172a;
+            margin-bottom: 4px;
+        }
+
+        .video-placeholder-desc {
+            font-size: 12px;
+            color: #64748b;
+            max-width: 440px;
+            margin: 0 auto;
+            line-height: 1.5;
+        }
+
+        .feed-video-footer {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 8px 14px;
+            background: #1e293b;
+            border-top: 1px solid #334155;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .video-type-pill {
+            background: #0a66c2;
+            color: #ffffff;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+        }
+
+        .video-status-badge {
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+            background: #0f172a;
+            padding: 2px 8px;
+            border-radius: 4px;
+            border: 1px solid #334155;
+        }
+
+        /* --- Open on LinkedIn Button Styling (Part 3) --- */
+        .btn-open-linkedin {
+            background: #0a66c2;
+            color: #ffffff !important;
+            text-decoration: none !important;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 13px;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            border: 1px solid #0a66c2;
+            transition: background 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
+            user-select: none;
+            line-height: 1;
+        }
+
+        .btn-open-linkedin:hover {
+            background: #004182;
+            border-color: #004182;
+            color: #ffffff !important;
+        }
+
+        .btn-open-linkedin:focus-visible {
+            outline: 2px solid #0a66c2;
+            outline-offset: 2px;
+        }
+
+        .btn-open-linkedin .open-linkedin-icon {
+            flex-shrink: 0;
+            display: inline-block;
+            transition: transform 0.15s ease;
+        }
+
+        .btn-open-linkedin:hover .open-linkedin-icon {
+            transform: translate(2px, -2px);
+        }
+
+        .btn-open-linkedin.disabled {
+            background: #e2e8f0;
+            border-color: #cbd5e1;
+            color: #64748b !important;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .btn-disabled-note {
+            font-size: 11px;
+            opacity: 0.85;
+        }
+
     </style>
 </head>
 <body>
@@ -530,6 +1100,8 @@
         <span id="shareCount">0</span>
     </div>
 
+
+
     <!-- Dashboard Content Layout -->
     <div class="dashboard-body">
 
@@ -539,6 +1111,14 @@
                 <h3>Activity Distribution</h3>
                 <div id="typeBreakdown">
                     <p style="color:#666; font-size:13px;">No activity types recorded.</p>
+                </div>
+            </div>
+
+            <!-- Sentiment & Tone Distribution (Phase 3 - Issue 6) -->
+            <div class="panel-card" id="sentimentSummaryPanel">
+                <h3>Sentiment & Tone Distribution</h3>
+                <div id="sentimentBreakdown">
+                    <p style="color:#64748b; font-size:13px;">No sentiment data recorded.</p>
                 </div>
             </div>
 

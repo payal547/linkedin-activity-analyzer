@@ -7,7 +7,7 @@ load_dotenv()
 
 CLIENT_ID = os.getenv("LINKEDIN_CLIENT_ID")
 CLIENT_SECRET = os.getenv("LINKEDIN_CLIENT_SECRET")
-REDIRECT_URI = os.getenv("LINKEDIN_REDIRECT_URI")
+REDIRECT_URI = os.getenv("LINKEDIN_REDIRECT_URI", "http://127.0.0.1:5000/auth/linkedin/callback")
 
 
 def get_linkedin_authorization_url(state):
