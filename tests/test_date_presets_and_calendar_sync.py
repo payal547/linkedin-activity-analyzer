@@ -20,12 +20,22 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-# Add backend directory to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+# Add project root and backend directory to sys.path
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_BACKEND_DIR = _PROJECT_ROOT / "backend"
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
-from services.analysis_service import analyze_activities
-from linkedin.playwright_service import parse_relative_time_to_date
-from app import app
+try:
+    from services.analysis_service import analyze_activities
+    from linkedin.playwright_service import parse_relative_time_to_date
+    from app import app
+except ImportError:
+    from backend.services.analysis_service import analyze_activities  # type: ignore
+    from backend.linkedin.playwright_service import parse_relative_time_to_date  # type: ignore
+    from backend.app import app  # type: ignore
 
 
 class TestDatePresetsAndCalendarSync(unittest.TestCase):

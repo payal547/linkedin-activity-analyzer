@@ -520,6 +520,58 @@
             }
         }
 
+        /* DD/MM/YYYY text date input (index.html common dates) */
+        .common-date-input-wrap {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .common-date-text-input {
+            width: 100%;
+            padding: 6px 36px 6px 8px;
+            font-size: 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            outline: none;
+            color: #1e293b;
+            background: #fafbfc;
+            font-family: inherit;
+        }
+
+        .common-date-text-input:focus {
+            border-color: #0a66c2;
+            background: white;
+        }
+
+        .common-cal-btn {
+            position: absolute;
+            right: 4px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 3px 5px;
+            font-size: 14px;
+            color: #475569;
+            border-radius: 3px;
+        }
+
+        .common-cal-btn:hover {
+            background: #f1f5f9;
+            color: #0a66c2;
+        }
+
+        .common-hidden-picker {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+            pointer-events: none;
+            border: 0;
+            padding: 0;
+            margin: 0;
+        }
+
         .saved-profiles-footer-actions {
             margin-top: 16px;
         }
@@ -877,12 +929,20 @@
                     </div>
                     <div class="common-dates-fields">
                         <div class="date-field">
-                            <label for="commonStartDate">Start Date:</label>
-                            <input type="date" id="commonStartDate" class="common-start-date">
+                            <label for="commonStartDate">Start Date (DD/MM/YYYY):</label>
+                            <div class="common-date-input-wrap">
+                                <input type="text" id="commonStartDate" class="common-date-text-input" placeholder="DD/MM/YYYY" maxlength="10" autocomplete="off" oninput="onCommonDateChange()">
+                                <button type="button" class="common-cal-btn" onclick="triggerCommonCalendar('commonStartDate')" title="Open calendar" aria-label="Open Start Date calendar">📅</button>
+                                <input type="date" id="commonStartDate_native" tabindex="-1" class="common-hidden-picker" onchange="onCommonNativePicked('commonStartDate', this.value)">
+                            </div>
                         </div>
                         <div class="date-field">
-                            <label for="commonEndDate">End Date:</label>
-                            <input type="date" id="commonEndDate" class="common-end-date">
+                            <label for="commonEndDate">End Date (DD/MM/YYYY):</label>
+                            <div class="common-date-input-wrap">
+                                <input type="text" id="commonEndDate" class="common-date-text-input" placeholder="DD/MM/YYYY" maxlength="10" autocomplete="off" oninput="onCommonDateChange()">
+                                <button type="button" class="common-cal-btn" onclick="triggerCommonCalendar('commonEndDate')" title="Open calendar" aria-label="Open End Date calendar">📅</button>
+                                <input type="date" id="commonEndDate_native" tabindex="-1" class="common-hidden-picker" onchange="onCommonNativePicked('commonEndDate', this.value)">
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1048,7 +1108,13 @@
                 }, 300);
 
             } catch (err) {
-                showError(err.message);
+                const isNetErr = (err instanceof TypeError && err.message &&
+                    (err.message.toLowerCase().includes("fetch") ||
+                     err.message.toLowerCase().includes("network") ||
+                     err.message.toLowerCase().includes("failed")));
+                showError(isNetErr
+                    ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
+                    : err.message);
                 if (btn) {
                     btn.disabled = false;
                     btn.textContent = "Analyze Profile →";
@@ -1140,18 +1206,31 @@
                 container.innerHTML = "";
 
                 const _now = new Date();
-                const todayStr = `${_now.getFullYear()}-${String(_now.getMonth() + 1).padStart(2, '0')}-${String(_now.getDate()).padStart(2, '0')}`;
+                // Build local DD/MM/YYYY strings without UTC timezone shift
+                const todayDMY = `${String(_now.getDate()).padStart(2,"0")}/${String(_now.getMonth()+1).padStart(2,"0")}/${_now.getFullYear()}`;
                 const _dPast = new Date(_now.getFullYear(), _now.getMonth(), _now.getDate() - 29);
-                const past30Str = `${_dPast.getFullYear()}-${String(_dPast.getMonth() + 1).padStart(2, '0')}-${String(_dPast.getDate()).padStart(2, '0')}`;
+                const past30DMY = `${String(_dPast.getDate()).padStart(2,"0")}/${String(_dPast.getMonth()+1).padStart(2,"0")}/${_dPast.getFullYear()}`;
+
+                // ISO versions for the hidden native pickers
+                const todayISO = `${_now.getFullYear()}-${String(_now.getMonth()+1).padStart(2,"0")}-${String(_now.getDate()).padStart(2,"0")}`;
+                const past30ISO = `${_dPast.getFullYear()}-${String(_dPast.getMonth()+1).padStart(2,"0")}-${String(_dPast.getDate()).padStart(2,"0")}`;
 
                 // Set common date defaults if not already chosen
                 const commonStartInput = document.getElementById("commonStartDate");
                 const commonEndInput = document.getElementById("commonEndDate");
+                const commonStartNative = document.getElementById("commonStartDate_native");
+                const commonEndNative = document.getElementById("commonEndDate_native");
                 if (commonStartInput && !commonStartInput.value) {
-                    commonStartInput.value = past30Str;
+                    commonStartInput.value = past30DMY;
                 }
                 if (commonEndInput && !commonEndInput.value) {
-                    commonEndInput.value = todayStr;
+                    commonEndInput.value = todayDMY;
+                }
+                if (commonStartNative && !commonStartNative.value) {
+                    commonStartNative.value = past30ISO;
+                }
+                if (commonEndNative && !commonEndNative.value) {
+                    commonEndNative.value = todayISO;
                 }
 
                 profiles.forEach(p => {
@@ -1261,10 +1340,24 @@
             const errorEl = document.getElementById("savedProfilesMsg") || document.getElementById("urlErrorMsg");
             if (errorEl) errorEl.style.display = "none";
 
-            const commonStart = document.getElementById("commonStartDate")?.value || "";
-            const commonEnd = document.getElementById("commonEndDate")?.value || "";
+            // Read DD/MM/YYYY text inputs and convert to ISO YYYY-MM-DD for the backend
+            const startRaw = (document.getElementById("commonStartDate")?.value || "").trim();
+            const endRaw = (document.getElementById("commonEndDate")?.value || "").trim();
 
-            // Validate common date range
+            // Convert DD/MM/YYYY → YYYY-MM-DD (safe local parse, no UTC shift)
+            function dmyToISO(str) {
+                if (!str) return "";
+                const m4 = str.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/);
+                if (m4) return `${m4[3]}-${m4[2].padStart(2,"0")}-${m4[1].padStart(2,"0")}`;
+                // Already ISO
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return str;
+                return str;
+            }
+
+            const commonStart = dmyToISO(startRaw);
+            const commonEnd = dmyToISO(endRaw);
+
+            // Validate common date range using ISO comparison (safe)
             if (commonStart && commonEnd && commonStart > commonEnd) {
                 const msg = "Start Date must be on or before End Date.";
                 if (errorEl) {
@@ -1460,13 +1553,20 @@
 
             } catch (err) {
                 if (progressInterval) clearInterval(progressInterval);
+                const _batchNetErr = (err instanceof TypeError && err.message &&
+                    (err.message.toLowerCase().includes("fetch") ||
+                     err.message.toLowerCase().includes("network") ||
+                     err.message.toLowerCase().includes("failed")));
+                const _batchMsg = _batchNetErr
+                    ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
+                    : (err.message || "Request failed.");
                 if (progressCard) {
                     if (barEl) barEl.style.backgroundColor = "#dc2626";
                     if (statusTextEl) statusTextEl.textContent = "Analysis stopped with an error.";
-                    if (detailTextEl) detailTextEl.textContent = err.message || "Request failed.";
+                    if (detailTextEl) detailTextEl.textContent = _batchMsg;
                 }
                 if (errorEl) {
-                    errorEl.textContent = err.message;
+                    errorEl.textContent = _batchMsg;
                     errorEl.style.display = "block";
                 }
                 if (btn) {
@@ -1552,6 +1652,88 @@
             return String(str)
                 .replace(/"/g, "&quot;")
                 .replace(/'/g, "&#39;");
+        }
+
+        // ----- DD/MM/YYYY helpers for the common date range pickers -----
+        function _parseDMY(str) {
+            if (!str) return null;
+            const s = String(str).trim();
+            const mDmy = s.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/);
+            if (mDmy) {
+                const d = new Date(parseInt(mDmy[3],10), parseInt(mDmy[2],10)-1, parseInt(mDmy[1],10));
+                if (!isNaN(d.getTime()) && d.getDate()===parseInt(mDmy[1],10)) return d;
+            }
+            const mIso = s.match(/^(\d{4})[\/\.-](\d{1,2})[\/\.-](\d{1,2})$/);
+            if (mIso) {
+                const d = new Date(parseInt(mIso[1],10), parseInt(mIso[2],10)-1, parseInt(mIso[3],10));
+                if (!isNaN(d.getTime())) return d;
+            }
+            return null;
+        }
+
+        function _toISO(d) {
+            if (!d) return "";
+            return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+        }
+
+        function triggerCommonCalendar(inputId) {
+            const textInput = document.getElementById(inputId);
+            const nativePicker = document.getElementById(inputId + "_native");
+            if (!nativePicker) return;
+            if (textInput && textInput.value) {
+                const d = _parseDMY(textInput.value);
+                if (d) nativePicker.value = _toISO(d);
+            }
+            try {
+                if (typeof nativePicker.showPicker === "function") {
+                    nativePicker.showPicker();
+                } else {
+                    nativePicker.focus(); nativePicker.click();
+                }
+            } catch (e) {
+                nativePicker.focus(); nativePicker.click();
+            }
+        }
+
+        function onCommonNativePicked(inputId, isoVal) {
+            if (!isoVal) return;
+            const parts = isoVal.split("-");
+            if (parts.length === 3) {
+                const formatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
+                const textInput = document.getElementById(inputId);
+                if (textInput) textInput.value = formatted;
+            }
+        }
+
+        function onCommonDateChange() {
+            // Sync native pickers to reflect the DD/MM/YYYY text values
+            ["commonStartDate", "commonEndDate"].forEach(id => {
+                const textEl = document.getElementById(id);
+                const nativeEl = document.getElementById(id + "_native");
+                if (textEl && nativeEl) {
+                    const d = _parseDMY(textEl.value);
+                    if (d) nativeEl.value = _toISO(d);
+                }
+            });
+        }
+
+        // Override handleAnalyzeSelectedProfiles to read DD/MM/YYYY and convert to ISO
+        const _origHandleAnalyzeSelected = handleAnalyzeSelectedProfiles;
+        async function handleAnalyzeSelectedProfiles() {
+            // Convert common date text inputs from DD/MM/YYYY to ISO before passing to backend
+            const startTextEl = document.getElementById("commonStartDate");
+            const endTextEl = document.getElementById("commonEndDate");
+            if (startTextEl) {
+                const d = _parseDMY(startTextEl.value);
+                if (d) startTextEl._isoValue = _toISO(d);
+                else startTextEl._isoValue = "";
+            }
+            if (endTextEl) {
+                const d = _parseDMY(endTextEl.value);
+                if (d) endTextEl._isoValue = _toISO(d);
+                else endTextEl._isoValue = "";
+            }
+            return _origHandleAnalyzeSelected();
         }
     </script>
 

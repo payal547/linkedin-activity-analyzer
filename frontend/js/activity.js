@@ -504,7 +504,15 @@ async function analyzeActivity() {
         window.location.href = "/dashboard";
 
     } catch (err) {
-        showError(err.message);
+        const isNetworkError = (err instanceof TypeError && err.message &&
+            (err.message.toLowerCase().includes("fetch") ||
+             err.message.toLowerCase().includes("network") ||
+             err.message.toLowerCase().includes("failed")));
+        if (isNetworkError) {
+            showError("⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000, then try again.");
+        } else {
+            showError(err.message);
+        }
     } finally {
         if (submitBtn) {
             submitBtn.disabled = false;

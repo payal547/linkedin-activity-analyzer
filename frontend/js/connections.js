@@ -11,26 +11,32 @@ function formatDateDDMMYY(dateInput) {
         if (isNaN(dateInput.getTime())) return "";
         const dd = String(dateInput.getDate()).padStart(2, "0");
         const mm = String(dateInput.getMonth() + 1).padStart(2, "0");
-        const yy = String(dateInput.getFullYear()).slice(-2);
-        return `${dd}/${mm}/${yy}`;
+        const yyyy = String(dateInput.getFullYear());
+        return `${dd}/${mm}/${yyyy}`;
     }
     const s = String(dateInput).trim();
     if (!s) return "";
-    if (/^\d{2}\/\d{2}\/\d{2}$/.test(s)) return s;
-    const mDmy4 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+    // Already DD/MM/YYYY (4-digit year) – return as-is normalised
+    const mDmy4 = s.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/);
     if (mDmy4) {
-        return `${mDmy4[1].padStart(2, "0")}/${mDmy4[2].padStart(2, "0")}/${mDmy4[3].slice(-2)}`;
+        return `${mDmy4[1].padStart(2, "0")}/${mDmy4[2].padStart(2, "0")}/${mDmy4[3]}`;
     }
-    const mIso = s.match(/^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+    // Legacy DD/MM/YY (2-digit) – expand to 4-digit
+    const mDmy2 = s.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{2})$/);
+    if (mDmy2) {
+        return `${mDmy2[1].padStart(2, "0")}/${mDmy2[2].padStart(2, "0")}/20${mDmy2[3]}`;
+    }
+    // ISO YYYY-MM-DD
+    const mIso = s.match(/^(\d{4})[\/\.-](\d{1,2})[\/\.-](\d{1,2})/);
     if (mIso) {
-        return `${mIso[3].padStart(2, "0")}/${mIso[2].padStart(2, "0")}/${mIso[1].slice(-2)}`;
+        return `${mIso[3].padStart(2, "0")}/${mIso[2].padStart(2, "0")}/${mIso[1]}`;
     }
     const parsed = new Date(s);
     if (!isNaN(parsed.getTime())) {
         const dd = String(parsed.getDate()).padStart(2, "0");
         const mm = String(parsed.getMonth() + 1).padStart(2, "0");
-        const yy = String(parsed.getFullYear()).slice(-2);
-        return `${dd}/${mm}/${yy}`;
+        const yyyy = String(parsed.getFullYear());
+        return `${dd}/${mm}/${yyyy}`;
     }
     return s;
 }
@@ -141,10 +147,17 @@ async function loadConnections() {
         renderApiNotice(data);
     } catch (error) {
         console.error("Error loading connections:", error);
+        const isNetErr = (error instanceof TypeError && error.message &&
+            (error.message.toLowerCase().includes("fetch") ||
+             error.message.toLowerCase().includes("network") ||
+             error.message.toLowerCase().includes("failed")));
+        const displayMsg = isNetErr
+            ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
+            : escapeHTML(error.message);
         listEl.innerHTML = `
             <div class="message">
                 <h3 style="color:#d93025; margin-bottom:8px;">Unable to load connections</h3>
-                <p style="color:#666;">${escapeHTML(error.message)}</p>
+                <p style="color:#666;">${displayMsg}</p>
             </div>
         `;
     }

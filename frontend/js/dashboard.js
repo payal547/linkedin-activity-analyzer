@@ -173,7 +173,14 @@ async function initDashboard() {
 
 
 
-    // 1. Immediately check sessionStorage for analysis matching this exact profile
+    // Retrieve active filter criteria to ensure cached date range matches user selection
+    let activeFilter = null;
+    try {
+        const filterStr = localStorage.getItem("activityFilter");
+        if (filterStr) activeFilter = JSON.parse(filterStr);
+    } catch (e) {}
+
+    // 1. Immediately check sessionStorage for analysis matching this exact profile & date filter
 
     const stored = sessionStorage.getItem("currentAnalysis");
 
@@ -213,6 +220,19 @@ async function initDashboard() {
 
 
 
+                // Prevent old date filters from overriding new user selections
+                if (isMatch && activeFilter) {
+                    const reqStart = activeFilter.startDate || null;
+                    const reqEnd = activeFilter.endDate || null;
+                    const storedRange = parsedStored.date_range || {};
+                    if (reqStart && storedRange.start && storedRange.start !== reqStart) {
+                        isMatch = false;
+                    }
+                    if (reqEnd && storedRange.end && storedRange.end !== reqEnd) {
+                        isMatch = false;
+                    }
+                }
+
                 if (isMatch) {
 
                     analysisData = parsedStored;
@@ -233,7 +253,7 @@ async function initDashboard() {
 
 
 
-    // 2. Query backend for authoritative latest analysis
+    // 2. Query backend for authoritative latest analysis matching profile & date filter
 
     try {
 
@@ -246,6 +266,11 @@ async function initDashboard() {
         if (targetProfileUrl) qp.push(`profile_url=${encodeURIComponent(targetProfileUrl)}`);
 
         if (targetSubjectName) qp.push(`subject_name=${encodeURIComponent(targetSubjectName)}`);
+
+        if (activeFilter) {
+            if (activeFilter.startDate) qp.push(`startDate=${encodeURIComponent(activeFilter.startDate)}`);
+            if (activeFilter.endDate) qp.push(`endDate=${encodeURIComponent(activeFilter.endDate)}`);
+        }
 
         if (qp.length > 0) apiUrl += `?${qp.join("&")}`;
 
@@ -304,6 +329,26 @@ async function initDashboard() {
     } catch (e) {
 
         console.warn("Could not fetch latest analysis from server:", e);
+
+        // Show a meaningful user-facing notice when backend is unreachable
+        if (!analysisData) {
+            const _isNetErr = (e instanceof TypeError && e.message &&
+                (e.message.toLowerCase().includes("fetch") ||
+                 e.message.toLowerCase().includes("network") ||
+                 e.message.toLowerCase().includes("failed")));
+            const _noticeId = "dashboard-fetch-error-notice";
+            if (!document.getElementById(_noticeId)) {
+                const _nd = document.createElement("div");
+                _nd.id = _noticeId;
+                _nd.style.cssText = "background:#fef3c7;color:#92400e;padding:10px 18px;font-size:13px;border-bottom:1px solid #fde68a;text-align:center;";
+                _nd.textContent = _isNetErr
+                    ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
+                    : ("⚠️ Failed to load analysis from server: " + (e.message || "Unknown error"));
+                const _hdr = document.querySelector("header") || document.body.firstElementChild;
+                if (_hdr && _hdr.parentNode) _hdr.parentNode.insertBefore(_nd, _hdr.nextSibling);
+                else document.body.insertBefore(_nd, document.body.firstChild);
+            }
+        }
 
     }
 

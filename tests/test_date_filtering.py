@@ -8,11 +8,20 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-# Add backend directory to sys.path
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
+# Add project root and backend directory to sys.path
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_BACKEND_DIR = _PROJECT_ROOT / "backend"
+if str(_BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_DIR))
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
 
-from linkedin.playwright_service import parse_relative_time_to_date, check_feed_date_boundary
-from services.analysis_service import analyze_activities
+try:
+    from linkedin.playwright_service import parse_relative_time_to_date, check_feed_date_boundary
+    from services.analysis_service import analyze_activities
+except ImportError:
+    from backend.linkedin.playwright_service import parse_relative_time_to_date, check_feed_date_boundary  # type: ignore
+    from backend.services.analysis_service import analyze_activities  # type: ignore
 
 
 class TestDateFiltering(unittest.TestCase):
@@ -315,7 +324,10 @@ class TestDateFiltering(unittest.TestCase):
         for a deeper query (e.g. 'Last 30 Days'), but can be reused once end-of-feed
         or sufficient depth is reached.
         """
-        from linkedin.playwright_service import _PROFILE_CACHE, to_date_obj
+        try:
+            from linkedin.playwright_service import _PROFILE_CACHE, to_date_obj
+        except ImportError:
+            from backend.linkedin.playwright_service import _PROFILE_CACHE, to_date_obj  # type: ignore
         import time
 
         test_slug = "test-cache-profile"
