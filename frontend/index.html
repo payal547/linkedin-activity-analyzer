@@ -426,15 +426,88 @@
             gap: 12px;
         }
 
-        .saved-profile-card {
-            background: #f8fafc;
-            border: 1.5px solid #e2e8f0;
+        /* YouTube-Style Live Top Progress Bar */
+        .yt-progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            width: 0%;
+            background: #ff0000;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.85), 0 0 5px rgba(255, 0, 0, 0.5);
+            z-index: 999999;
+            transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .yt-progress-bar.indeterminate {
+            animation: ytShimmer 1.8s infinite ease-in-out;
+        }
+
+        @keyframes ytShimmer {
+            0% { opacity: 0.65; filter: brightness(1); }
+            50% { opacity: 1.0; filter: brightness(1.35); }
+            100% { opacity: 0.65; filter: brightness(1); }
+        }
+
+        .yt-progress-bar.error-bar {
+            background: #dc2626 !important;
+            box-shadow: 0 0 10px rgba(220, 38, 38, 0.9) !important;
+        }
+
+        .yt-progress-chip {
+            position: fixed;
+            top: 12px;
+            right: 20px;
+            z-index: 999998;
+            background: rgba(15, 23, 42, 0.94);
+            backdrop-filter: blur(8px);
+            color: #ffffff;
+            padding: 7px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: opacity 0.3s ease;
+        }
+
+        .yt-spinner {
+            width: 13px;
+            height: 13px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #ff0000;
+            border-radius: 50%;
+            animation: ytSpin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes ytSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        .yt-chip-profile {
+            background: rgba(255, 255, 255, 0.18);
+            padding: 2px 8px;
             border-radius: 10px;
+            font-size: 11px;
+            color: #f1f5f9;
+        }
+
+        .saved-profile-card {
+            background: #ffffff;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 12px;
             padding: 14px 16px;
             display: flex;
             flex-direction: column;
             gap: 12px;
-            transition: all 0.15s ease;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            position: relative;
         }
 
         .saved-profiles-batch-actions {
@@ -637,18 +710,55 @@
         .saved-profile-card.selected-card {
             border-color: #0a66c2;
             background: #f0f7ff;
-            box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.2);
+            box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.25), 0 4px 12px rgba(10, 102, 194, 0.08);
+        }
+
+        .saved-profile-card.selected-card:hover {
+            border-color: #0a66c2;
+            background: #f0f7ff;
+        }
+
+        .saved-profile-card.selected-card .saved-profile-avatar {
+            border-color: #0a66c2;
+            box-shadow: 0 0 0 2.5px rgba(10, 102, 194, 0.4);
+        }
+
+        .saved-profile-card.selected-card .saved-profile-avatar-fallback {
+            border-color: #0a66c2;
+            box-shadow: 0 0 0 2.5px rgba(10, 102, 194, 0.4);
         }
 
         .saved-profile-dates {
             display: grid;
             grid-template-columns: 1fr 1fr;
             gap: 10px;
-            background: #ffffff;
-            padding: 10px 12px;
+            background: #f8fafc;
+            padding: 12px;
             border-radius: 8px;
             border: 1px solid #e2e8f0;
-            margin-top: 4px;
+            margin: 8px 0 2px 62px;
+        }
+
+        .saved-profile-date-heading {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            color: #334155;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .saved-profile-date-preset {
+            max-width: 155px;
+            padding: 5px 8px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            color: #334155;
+            background: #fff;
+            font: inherit;
+            font-weight: 500;
         }
 
         .date-field {
@@ -668,8 +778,9 @@
         }
 
         .date-field input[type="date"] {
-            padding: 6px 8px;
-            font-size: 12px;
+            width: 100%;
+            padding: 8px 9px;
+            font-size: 13px;
             border: 1px solid #cbd5e1;
             border-radius: 6px;
             outline: none;
@@ -687,6 +798,12 @@
             border-color: #cbd5e1;
             background: white;
             box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+        }
+
+        @media (max-width: 520px) {
+            .saved-profile-dates { margin-left: 0; grid-template-columns: 1fr; }
+            .saved-profile-date-heading { grid-column: 1; }
+            .saved-profile-date-heading { align-items: flex-start; flex-direction: column; }
         }
 
         .saved-profile-body {
@@ -804,6 +921,14 @@
 </head>
 
 <body>
+
+    <!-- YouTube-Style Live Top Progress Bar -->
+    <div id="ytAnalysisProgressBar" class="yt-progress-bar" style="display: none;"></div>
+    <div id="ytAnalysisProgressChip" class="yt-progress-chip" style="display: none;">
+        <span class="yt-spinner"></span>
+        <span class="yt-chip-text" id="ytChipText">Connecting to Chrome (5%)...</span>
+        <span class="yt-chip-profile" id="ytChipProfile" style="display: none;"></span>
+    </div>
 
     <header class="header">
         <h1>LinkedIn Activity Analyzer</h1>
@@ -954,7 +1079,7 @@
 
                 <div id="savedProfilesMsg" class="error-message" style="margin-bottom: 12px; display: none;"></div>
 
-                <!-- Individual Saved Profile Cards Container (No date selectors inside) -->
+                <!-- Individual profile date ranges are set on each saved profile card. -->
                 <div id="savedProfilesContainer" class="saved-profiles-grid">
                     <!-- Dynamically rendered -->
                 </div>
@@ -1184,6 +1309,163 @@
             imgEl.replaceWith(fallbackDiv);
         }
 
+        /* YouTube-Style Live Top Progress Bar Controller */
+        let _ytPollInterval = null;
+
+        function startYouTubeProgressBar(initialText = "Connecting to Chrome (5%)...", targetRunId = null) {
+            const bar = document.getElementById("ytAnalysisProgressBar");
+            const chip = document.getElementById("ytAnalysisProgressChip");
+            const textEl = document.getElementById("ytChipText");
+            const profEl = document.getElementById("ytChipProfile");
+
+            if (bar) {
+                bar.className = "yt-progress-bar";
+                bar.style.width = "4%";
+                bar.style.opacity = "1";
+                bar.style.display = "block";
+            }
+            if (chip) {
+                chip.style.display = "flex";
+                chip.style.opacity = "1";
+            }
+            if (textEl) {
+                textEl.textContent = initialText;
+            }
+            if (profEl) {
+                profEl.style.display = "none";
+            }
+
+            if (_ytPollInterval) clearInterval(_ytPollInterval);
+
+            _ytPollInterval = setInterval(async () => {
+                try {
+                    const endpoint = targetRunId ? `/api/pipeline/${encodeURIComponent(targetRunId)}` : "/api/pipeline/latest";
+                    const res = await fetch(endpoint);
+                    if (!res.ok) return;
+                    const data = await res.json();
+                    if (!data || data.status === "no_runs") return;
+
+                    const pct = Math.min(95, Math.max(4, Number(data.progress_percentage) || 4));
+                    const stName = data.current_stage_name || "Analyzing Profile";
+                    const isIndeterminate = Boolean(data.is_indeterminate);
+
+                    if (bar) {
+                        bar.style.width = `${pct}%`;
+                        if (isIndeterminate) {
+                            bar.classList.add("indeterminate");
+                        } else {
+                            bar.classList.remove("indeterminate");
+                        }
+                    }
+
+                    if (textEl) {
+                        textEl.textContent = `${stName} (${pct}%)`;
+                    }
+
+                    if (profEl && data.total_profiles && data.total_profiles > 1) {
+                        profEl.style.display = "inline-block";
+                        const pIdx = data.current_profile_index || 1;
+                        const pTot = data.total_profiles;
+                        const pName = data.current_profile_name ? `: ${data.current_profile_name}` : "";
+                        profEl.textContent = `Profile ${pIdx} of ${pTot}${pName}`;
+                    }
+
+                    // Keep multiProfileProgressCard synchronized
+                    const cardBar = document.getElementById("multiProgressBar");
+                    const cardStep = document.getElementById("multiProgressStep");
+                    const cardStatus = document.getElementById("multiProgressStatusText");
+                    const cardDetail = document.getElementById("multiProgressDetailText");
+                    if (cardBar) cardBar.style.width = `${pct}%`;
+                    if (cardStep && data.total_profiles > 1) {
+                        cardStep.textContent = `${data.current_profile_index || 1} / ${data.total_profiles}`;
+                    }
+                    if (cardStatus) {
+                        const profPart = data.current_profile_name ? ` (${data.current_profile_name})` : "";
+                        cardStatus.textContent = `${stName} [${pct}%]${profPart}`;
+                    }
+                    if (cardDetail && data.stages) {
+                        const activeStage = data.stages.find(s => s.status === "running") || data.stages.find(s => s.id === data.current_stage_id);
+                        if (activeStage && activeStage.description) {
+                            cardDetail.textContent = activeStage.description;
+                        }
+                    }
+
+                    if (data.status === "completed" || data.progress_percentage >= 100) {
+                        completeYouTubeProgressBar();
+                    } else if (data.status === "failed") {
+                        errorYouTubeProgressBar("Analysis failed");
+                    }
+                } catch (e) {
+                    // Non-blocking poll exception
+                }
+            }, 300);
+        }
+
+        function completeYouTubeProgressBar() {
+            if (_ytPollInterval) {
+                clearInterval(_ytPollInterval);
+                _ytPollInterval = null;
+            }
+            const bar = document.getElementById("ytAnalysisProgressBar");
+            const chip = document.getElementById("ytAnalysisProgressChip");
+            const textEl = document.getElementById("ytChipText");
+
+            if (bar) {
+                bar.classList.remove("indeterminate");
+                bar.style.width = "100%";
+            }
+            if (textEl) {
+                textEl.textContent = "Preparing Dashboard (100%)";
+            }
+            setTimeout(() => {
+                if (chip) {
+                    chip.style.opacity = "0";
+                    setTimeout(() => { chip.style.display = "none"; }, 300);
+                }
+                if (bar) {
+                    bar.style.opacity = "0";
+                    setTimeout(() => {
+                        bar.style.display = "none";
+                        bar.style.opacity = "1";
+                        bar.style.width = "0%";
+                    }, 300);
+                }
+            }, 700);
+        }
+
+        function errorYouTubeProgressBar(msg = "Analysis failed") {
+            if (_ytPollInterval) {
+                clearInterval(_ytPollInterval);
+                _ytPollInterval = null;
+            }
+            const bar = document.getElementById("ytAnalysisProgressBar");
+            const chip = document.getElementById("ytAnalysisProgressChip");
+            const textEl = document.getElementById("ytChipText");
+
+            if (bar) {
+                bar.classList.remove("indeterminate");
+                bar.classList.add("error-bar");
+            }
+            if (textEl) {
+                textEl.textContent = `⚠️ ${msg}`;
+            }
+            setTimeout(() => {
+                if (chip) {
+                    chip.style.opacity = "0";
+                    setTimeout(() => { chip.style.display = "none"; }, 300);
+                }
+                if (bar) {
+                    bar.style.opacity = "0";
+                    setTimeout(() => {
+                        bar.style.display = "none";
+                        bar.style.opacity = "1";
+                        bar.classList.remove("error-bar");
+                        bar.style.width = "0%";
+                    }, 300);
+                }
+            }, 4000);
+        }
+
         async function loadSavedProfilesUI() {
             const section = document.getElementById("savedProfilesSection");
             const container = document.getElementById("savedProfilesContainer");
@@ -1233,7 +1515,7 @@
                     commonEndNative.value = todayISO;
                 }
 
-                profiles.forEach(p => {
+                profiles.forEach((p, profileIndex) => {
                     const card = document.createElement("div");
                     card.className = "saved-profile-card";
                     const dateStr = p.last_analyzed ? new Date(p.last_analyzed).toLocaleString(undefined, {
@@ -1268,12 +1550,45 @@
                                 ${dateStr ? `<div class="saved-profile-time">Last analyzed: ${escapeHTML(dateStr)}</div>` : ''}
                             </div>
                         </div>
+                        <div class="saved-profile-dates" aria-label="Date range for ${escapeAttr(p.name)}">
+                            <div class="saved-profile-date-heading">
+                                <span>Analysis date range</span>
+                                <select class="saved-profile-date-preset" aria-label="Quick date range for ${escapeAttr(p.name)}" onchange="applySavedProfileDatePreset(this)">
+                                    <option value="custom">Custom range</option>
+                                    <option value="30days">Last 30 days</option>
+                                    <option value="1year">Last 1 year</option>
+                                    <option value="older1year">1-2 years ago</option>
+                                </select>
+                            </div>
+                            <div class="date-field">
+                                <label for="savedProfile${profileIndex}Start">From Date</label>
+                                <input type="date" id="savedProfile${profileIndex}Start" class="saved-profile-start-date" aria-label="From date for ${escapeAttr(p.name)}" value="${past30ISO}" onchange="markSavedProfileRangeCustom(this)">
+                            </div>
+                            <div class="date-field">
+                                <label for="savedProfile${profileIndex}End">To Date</label>
+                                <input type="date" id="savedProfile${profileIndex}End" class="saved-profile-end-date" aria-label="To date for ${escapeAttr(p.name)}" value="${todayISO}" onchange="markSavedProfileRangeCustom(this)">
+                            </div>
+                        </div>
                         <div class="saved-profile-actions">
                             <button type="button" class="btn-analyze-again" onclick="analyzeSavedProfile('${escapeAttr(p.profile_url)}')">
                                 Analyze Again →
                             </button>
                         </div>
                     `;
+
+                    // Card and avatar click selection handler
+                    card.addEventListener("click", (e) => {
+                        // Prevent intercepting direct clicks on links, buttons, date inputs, or the checkbox itself
+                        if (e.target.closest("a, button, .profile-select-label, input[type='checkbox'], input[type='date'], input[type='text']")) {
+                            return;
+                        }
+                        const cb = card.querySelector(".profile-select-checkbox");
+                        if (cb) {
+                            cb.checked = !cb.checked;
+                            handleProfileSelectionChange(cb);
+                        }
+                    });
+
                     container.appendChild(card);
                 });
 
@@ -1371,6 +1686,7 @@
 
             const cards = document.querySelectorAll(".saved-profile-card");
             const selectedList = [];
+            let selectedRangeError = "";
 
             cards.forEach(card => {
                 const cb = card.querySelector(".profile-select-checkbox");
@@ -1379,17 +1695,34 @@
                     const name = card.querySelector(".saved-profile-name")?.textContent?.trim() || "";
                     const headline = card.querySelector(".saved-profile-headline")?.textContent?.trim() || "";
                     const avatar = card.querySelector(".saved-profile-avatar")?.getAttribute("src") || null;
+                    const profileStart = card.querySelector(".saved-profile-start-date")?.value || "";
+                    const profileEnd = card.querySelector(".saved-profile-end-date")?.value || "";
+
+                    if (profileStart && profileEnd && profileStart > profileEnd) {
+                        selectedRangeError = `From Date must be on or before To Date for ${name || "this profile"}.`;
+                        return;
+                    }
 
                     selectedList.push({
                         profile_url: url,
                         name: name,
                         headline: headline,
                         picture: avatar && !avatar.startsWith("data:") ? avatar : null,
-                        startDate: commonStart,
-                        endDate: commonEnd
+                        startDate: profileStart,
+                        endDate: profileEnd
                     });
                 }
             });
+
+            if (selectedRangeError) {
+                if (errorEl) {
+                    errorEl.textContent = selectedRangeError;
+                    errorEl.style.display = "block";
+                } else {
+                    alert(selectedRangeError);
+                }
+                return;
+            }
 
             if (selectedList.length === 0) {
                 const msg = "Please select at least one profile to analyze.";
@@ -1411,6 +1744,9 @@
             againBtns.forEach(b => b.disabled = true);
             isAnalyzingProfiles = true;
 
+            // Start YouTube-style Live Top Progress Bar
+            startYouTubeProgressBar(`Analyzing 1 of ${selectedList.length}: ${selectedList[0].name || selectedList[0].profile_url}...`);
+
             // Phase 3 - Issue 7: Multi-profile progress feedback elements
             const progressCard = document.getElementById("multiProfileProgressCard");
             const headingEl = document.getElementById("multiProgressHeading");
@@ -1428,35 +1764,15 @@
                 if (stepEl) stepEl.textContent = `1 / ${selectedList.length}`;
                 if (barEl) {
                     barEl.style.backgroundColor = "#0a66c2";
-                    barEl.style.width = `${Math.round(100 / (selectedList.length + 1))}%`;
+                    barEl.style.width = "5%";
                 }
                 const firstProf = selectedList[0];
                 if (statusTextEl) {
-                    statusTextEl.textContent = `Analyzing profile 1 of ${selectedList.length}: ${firstProf.name || firstProf.profile_url}...`;
+                    statusTextEl.textContent = `Connecting to Chrome & LinkedIn for profile 1 of ${selectedList.length}: ${firstProf.name || firstProf.profile_url}...`;
                 }
                 if (detailTextEl) {
-                    detailTextEl.textContent = "Connecting to LinkedIn data feed... Polite spacing is applied to avoid rate limits.";
+                    detailTextEl.textContent = "Connecting via DevTools protocol and initializing pipeline...";
                 }
-            }
-
-            let currentPIdx = 0;
-            let progressInterval = null;
-            if (selectedList.length > 1 && progressCard) {
-                progressInterval = setInterval(() => {
-                    currentPIdx++;
-                    if (currentPIdx < selectedList.length) {
-                        const prof = selectedList[currentPIdx];
-                        const pct = Math.round(((currentPIdx + 1) / (selectedList.length + 1)) * 100);
-                        if (stepEl) stepEl.textContent = `${currentPIdx + 1} / ${selectedList.length}`;
-                        if (barEl) barEl.style.width = `${pct}%`;
-                        if (statusTextEl) {
-                            statusTextEl.textContent = `Analyzing profile ${currentPIdx + 1} of ${selectedList.length}: ${prof.name || prof.profile_url}...`;
-                        }
-                        if (detailTextEl) {
-                            detailTextEl.textContent = "Waiting between profile requests to avoid LinkedIn rate limits (polite pacing)...";
-                        }
-                    }
-                }, 2500);
             }
 
             try {
@@ -1471,12 +1787,13 @@
                     })
                 });
 
-                if (progressInterval) clearInterval(progressInterval);
-
                 const data = await response.json();
                 if (!response.ok) {
                     throw new Error(data.error || "Analysis of selected profiles failed.");
                 }
+
+                // Complete YouTube progress bar smoothly to 100%
+                completeYouTubeProgressBar();
 
                 // Update progress UI with complete status and per-profile results
                 if (progressCard) {
@@ -1552,7 +1869,6 @@
                 }, 1000);
 
             } catch (err) {
-                if (progressInterval) clearInterval(progressInterval);
                 const _batchNetErr = (err instanceof TypeError && err.message &&
                     (err.message.toLowerCase().includes("fetch") ||
                      err.message.toLowerCase().includes("network") ||
@@ -1560,6 +1876,7 @@
                 const _batchMsg = _batchNetErr
                     ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
                     : (err.message || "Request failed.");
+                errorYouTubeProgressBar(_batchMsg);
                 if (progressCard) {
                     if (barEl) barEl.style.backgroundColor = "#dc2626";
                     if (statusTextEl) statusTextEl.textContent = "Analysis stopped with an error.";
@@ -1702,6 +2019,7 @@
                 const formatted = `${parts[2]}/${parts[1]}/${parts[0]}`;
                 const textInput = document.getElementById(inputId);
                 if (textInput) textInput.value = formatted;
+                syncSavedProfileDateDefaults();
             }
         }
 
@@ -1715,6 +2033,45 @@
                     if (d) nativeEl.value = _toISO(d);
                 }
             });
+            syncSavedProfileDateDefaults();
+        }
+
+        function syncSavedProfileDateDefaults() {
+            const start = _toISO(_parseDMY(document.getElementById("commonStartDate")?.value));
+            const end = _toISO(_parseDMY(document.getElementById("commonEndDate")?.value));
+            document.querySelectorAll(".saved-profile-card").forEach(card => {
+                const startInput = card.querySelector(".saved-profile-start-date");
+                const endInput = card.querySelector(".saved-profile-end-date");
+                if (startInput && (start || !document.getElementById("commonStartDate")?.value.trim())) startInput.value = start;
+                if (endInput && (end || !document.getElementById("commonEndDate")?.value.trim())) endInput.value = end;
+                const preset = card.querySelector(".saved-profile-date-preset");
+                if (preset) preset.value = "custom";
+            });
+        }
+
+        function applySavedProfileDatePreset(select) {
+            const card = select.closest(".saved-profile-card");
+            if (!card || select.value === "custom") return;
+            const now = new Date();
+            const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            let start = new Date(end);
+            if (select.value === "30days") start.setDate(start.getDate() - 29);
+            else if (select.value === "1year") start.setDate(start.getDate() - 364);
+            else if (select.value === "older1year") {
+                end.setFullYear(end.getFullYear() - 1);
+                start = new Date(end);
+                start.setFullYear(start.getFullYear() - 1);
+            }
+            const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+            const startInput = card.querySelector(".saved-profile-start-date");
+            const endInput = card.querySelector(".saved-profile-end-date");
+            if (startInput) startInput.value = toISO(start);
+            if (endInput) endInput.value = toISO(end);
+        }
+
+        function markSavedProfileRangeCustom(input) {
+            const preset = input.closest(".saved-profile-card")?.querySelector(".saved-profile-date-preset");
+            if (preset) preset.value = "custom";
         }
 
         // Override handleAnalyzeSelectedProfiles to read DD/MM/YYYY and convert to ISO

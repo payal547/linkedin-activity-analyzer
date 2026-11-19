@@ -260,7 +260,7 @@ class TestPipelineService(unittest.TestCase):
 
         pipeline = get_pipeline_run(run_id)
         self.assertEqual(pipeline["status"], "running")
-        self.assertEqual(len(pipeline["stages"]), 10)
+        self.assertEqual(len(pipeline["stages"]), 11)
 
         # Stage 1: Validate URL
         start_stage(run_id, 1, "Validating input URL")

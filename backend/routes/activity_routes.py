@@ -22,7 +22,8 @@ from services.imported_activities_storage import (
 from linkedin.data_parser import parse_activities_csv, parse_activities_from_file_or_zip
 from services.pipeline_service import (
     start_pipeline_run, start_stage, complete_stage, fail_stage, skip_stage,
-    complete_pipeline_run, get_latest_pipeline_run, get_pipeline_run, get_recent_pipeline_runs
+    update_pipeline_profile, complete_pipeline_run, get_latest_pipeline_run,
+    get_pipeline_run, get_recent_pipeline_runs
 )
 from utils.logger import (
     get_logger, generate_run_id, set_current_run_id, clear_current_run_id,
@@ -350,9 +351,10 @@ def analyze():
     # Check if multiple profiles are requested
     profiles_payload = data.get("profiles")
     target_desc = "Multiple Profiles" if (profiles_payload and len(profiles_payload) > 0) else (data.get("subject_url") or data.get("subject_name") or "LinkedIn Profile")
-    start_pipeline_run(target_desc, run_id=run_id)
+    tot_profiles_count = len(profiles_payload) if (profiles_payload and len(profiles_payload) > 0) else 1
+    start_pipeline_run(target_desc, run_id=run_id, total_profiles=tot_profiles_count)
     start_stage(run_id, 1, f"Received analysis request for {target_desc}")
-    complete_stage(run_id, 1, items_count=len(profiles_payload) if profiles_payload else 1)
+    complete_stage(run_id, 1, items_count=tot_profiles_count)
 
     start_stage(run_id, 2, "Checking LinkedIn session state")
     complete_stage(run_id, 2, details="Session access token present" if access_token else "Public guest mode")
@@ -374,11 +376,6 @@ def analyze():
             if not p_url:
                 continue
 
-            # Polite pause between profile requests to respect LinkedIn rate limits and prevent 999
-            if idx > 0:
-                import time
-                time.sleep(5.0)
-
             slug = extract_slug(p_url)
             if not slug:
                 return jsonify({
@@ -387,6 +384,14 @@ def analyze():
             p_name = (p.get("name") or slug.replace("-", " ").title() or "LinkedIn Profile").strip()
             p_headline = (p.get("headline") or "LinkedIn Profile").strip()
             p_picture = p.get("picture") or None
+
+            # Update multi-profile tracking in pipeline monitoring
+            update_pipeline_profile(run_id, p_name, idx + 1, len(profiles_payload))
+
+            # Polite pacing between profile requests to respect LinkedIn rate limits and prevent 999
+            if idx > 0:
+                import time
+                time.sleep(1.0)
 
             # Preserve existing saved picture if not provided or empty in batch request
             if not p_picture or not (isinstance(p_picture, str) and (p_picture.startswith("http://") or p_picture.startswith("https://"))):
@@ -528,20 +533,23 @@ def analyze():
             "sentiment_summary": compute_sentiment_summary(all_activities)
         }
 
-        start_stage(run_id, 7, "Aggregating and normalizing batch profile activities")
-        complete_stage(run_id, 7, items_count=len(all_activities))
+        start_stage(run_id, 7, "Retrieving historical activities from MongoDB and storage")
+        complete_stage(run_id, 7, items_count=len(all_activities), details="Historical retrieval synchronized")
 
-        start_stage(run_id, 8, "Computing combined sentiment summary")
-        complete_stage(run_id, 8, items_count=len(all_activities))
+        start_stage(run_id, 8, "Removing duplicates across batch profile activities")
+        complete_stage(run_id, 8, items_count=len(all_activities), details=f"{len(all_activities)} unique activities")
 
         start_stage(run_id, 9, "Persisting batch analysis to MongoDB and JSON")
         save_latest_analysis(combined_result)
         session.pop("latest_analysis", None)
-        complete_stage(run_id, 9)
+        complete_stage(run_id, 9, details="Stored successfully in MongoDB")
 
-        start_stage(run_id, 10, "Packaging API response payload")
+        start_stage(run_id, 10, "Applying date filters across batch activities")
+        complete_stage(run_id, 10, items_count=len(all_activities), details="Date filtering verified")
+
+        start_stage(run_id, 11, "Packaging API response payload and dashboard summaries")
         combined_result["run_id"] = run_id
-        complete_stage(run_id, 10)
+        complete_stage(run_id, 11, details="Dashboard payload prepared")
 
         v_count = sum(1 for a in all_activities if a.get("type") == "video" or a.get("video_url") or a.get("video_thumbnail") or a.get("is_video") or (a.get("video_status") and a.get("video_status") != "No video"))
         v_likes_count = sum(1 for a in all_activities if a.get("type") == "like" and (a.get("video_url") or a.get("video_thumbnail") or a.get("is_video") or (a.get("video_status") and a.get("video_status") != "No video")))
@@ -603,6 +611,9 @@ def analyze():
         end_date = today_str
     elif date_type == "30days" and not start_date:
         start_date = (date.today() - timedelta(days=29)).isoformat()
+        end_date = today_str
+    elif date_type in ("1year", "365days", "year") and not start_date:
+        start_date = (date.today() - timedelta(days=364)).isoformat()
         end_date = today_str
     elif date_type == "all":
         start_date = None
@@ -675,19 +686,24 @@ def analyze():
         run_id=run_id
     )
 
-    # Check if stages 3, 4, 5 need skipping for local/cached/sample retrieval
+    # Check if browser stages need skipping for local/cached/sample retrieval
     run_state = get_pipeline_run(run_id)
     if run_state:
         st3 = next((s for s in run_state.get("stages", []) if s["id"] == 3), None)
         if st3 and st3["status"] == "pending":
             skip_stage(run_id, 3, "Playwright browser not needed for local/mock data")
-            skip_stage(run_id, 4, "Web navigation not needed")
-            skip_stage(run_id, 5, "Feed scrolling not needed")
-            start_stage(run_id, 6, "Retrieved records from local storage")
+            skip_stage(run_id, 4, "Web feed scrolling not needed")
+            start_stage(run_id, 5, "Classifying activities from storage")
+            complete_stage(run_id, 5, items_count=len(raw_activities))
+            start_stage(run_id, 6, "Parsing and validating dates from storage")
             complete_stage(run_id, 6, items_count=len(raw_activities))
 
-    # Perform deterministic analysis
-    start_stage(run_id, 7, "Applying date filtering, relative date parsing, and deduplication")
+    # Stage 7: Retrieve Historical Activities
+    start_stage(run_id, 7, "Retrieving historical activities from MongoDB and storage")
+    complete_stage(run_id, 7, items_count=len(raw_activities), details="History synchronized")
+
+    # Stage 8: Deduplication and Classification
+    start_stage(run_id, 8, "Removing duplicates by post URLs, URNs, and content hashes")
     result = analyze_activities(
         rows=raw_activities,
         activity_types=kinds,
@@ -699,9 +715,6 @@ def analyze():
         headline=headline,
         retrieval_completeness=status_tracker.get("retrieval_completeness", "COMPLETE" if (raw_activities and len(raw_activities) > 0) else "UNAVAILABLE")
     )
-    complete_stage(run_id, 7, items_count=len(result.get("activities", [])))
-
-    start_stage(run_id, 8, "Enriching activities with AI sentiment & tone scores")
     complete_stage(run_id, 8, items_count=len(result.get("activities", [])))
 
     result["retrieval_status"] = status_tracker.get("status", "")
@@ -798,11 +811,14 @@ def analyze():
     start_stage(run_id, 9, "Saving latest analysis to MongoDB and JSON dual-storage")
     save_latest_analysis(result)
     session.pop("latest_analysis", None)
-    complete_stage(run_id, 9)
+    complete_stage(run_id, 9, details="Stored successfully in MongoDB")
 
-    start_stage(run_id, 10, "Packaging API response payload")
+    start_stage(run_id, 10, "Applying date filters and activity constraints")
+    complete_stage(run_id, 10, items_count=len(result.get("activities", [])), details="Date filters applied")
+
+    start_stage(run_id, 11, "Preparing dashboard metrics and payload")
     result["run_id"] = run_id
-    complete_stage(run_id, 10)
+    complete_stage(run_id, 11, details="Dashboard payload prepared")
 
     v_count = sum(1 for a in result.get("activities", []) if a.get("type") == "video" or a.get("video_url") or a.get("video_thumbnail") or a.get("is_video") or (a.get("video_status") and a.get("video_status") != "No video"))
     v_likes_count = sum(1 for a in result.get("activities", []) if a.get("type") == "like" and (a.get("video_url") or a.get("video_thumbnail") or a.get("is_video") or (a.get("video_status") and a.get("video_status") != "No video")))

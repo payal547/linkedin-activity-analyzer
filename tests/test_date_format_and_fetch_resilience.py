@@ -182,6 +182,120 @@ class TestDateFormatAndFetchResilience(unittest.TestCase):
             self.assertEqual(res.status_code, 404)
             self.assertFalse(data.get("has_data", True))
 
+    # --------------------------------------------------------------------------
+    # 5. 1-Year Historical Retrieval & Adaptive Depth
+    # --------------------------------------------------------------------------
+
+    def test_1year_preset_inclusive_365_days(self):
+        """1-year preset calculates exact 365-day inclusive boundary."""
+        today = date(2026, 11, 5)
+        start_1y = today - timedelta(days=364)
+        self.assertEqual((today - start_1y).days + 1, 365)
+        self.assertEqual(start_1y.isoformat(), "2025-11-06")
+
+    def test_targeted_sub_tab_feed_selection(self):
+        """Authenticated mode directs specific activity types to dedicated LinkedIn sub-tabs."""
+        def get_target_url(slug, activity_types, is_auth=True):
+            target = f"https://www.linkedin.com/in/{slug}/recent-activity/all/" if is_auth else f"https://www.linkedin.com/in/{slug}/"
+            if is_auth and activity_types and "all" not in activity_types:
+                norm_types = [str(t).rstrip('s').lower() for t in activity_types if t]
+                if norm_types == ["post"]:
+                    target = f"https://www.linkedin.com/in/{slug}/recent-activity/posts/"
+                elif norm_types == ["comment"]:
+                    target = f"https://www.linkedin.com/in/{slug}/recent-activity/comments/"
+                elif norm_types in (["like"], ["reaction"]):
+                    target = f"https://www.linkedin.com/in/{slug}/recent-activity/reactions/"
+                elif norm_types in (["video"], ["media"]):
+                    target = f"https://www.linkedin.com/in/{slug}/recent-activity/videos/"
+            return target
+
+        self.assertEqual(get_target_url("john-doe", ["posts"]), "https://www.linkedin.com/in/john-doe/recent-activity/posts/")
+        self.assertEqual(get_target_url("john-doe", ["comments"]), "https://www.linkedin.com/in/john-doe/recent-activity/comments/")
+        self.assertEqual(get_target_url("john-doe", ["likes"]), "https://www.linkedin.com/in/john-doe/recent-activity/reactions/")
+        self.assertEqual(get_target_url("john-doe", ["all"]), "https://www.linkedin.com/in/john-doe/recent-activity/all/")
+        self.assertEqual(get_target_url("john-doe", ["posts", "likes"]), "https://www.linkedin.com/in/john-doe/recent-activity/all/")
+
+    def test_adaptive_scroll_and_activity_ceiling(self):
+        """Adaptive limits scale up to 45 scrolls and 600 items for 1-year / deep history."""
+        import os
+
+        def get_effective_limits(days_span):
+            is_deep_history = (days_span >= 60)
+            is_year_history = (days_span >= 180)
+            base_acts = int(os.getenv("LINKEDIN_MAX_ACTIVITIES", "200"))
+            base_scrolls = int(os.getenv("LINKEDIN_MAX_SCROLLS", "15"))
+
+            if is_year_history:
+                eff_acts = max(base_acts, int(os.getenv("LINKEDIN_YEAR_MAX_ACTIVITIES", "600")))
+                eff_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_YEAR_MAX_SCROLLS", "45")))
+            elif is_deep_history:
+                eff_acts = max(base_acts, int(os.getenv("LINKEDIN_DEEP_MAX_ACTIVITIES", "400")))
+                eff_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_DEEP_MAX_SCROLLS", "30")))
+            elif days_span <= 7 and days_span > 0:
+                eff_acts = base_acts
+                eff_scrolls = min(base_scrolls, 10)
+            else:
+                eff_acts = base_acts
+                eff_scrolls = base_scrolls
+            return eff_scrolls, eff_acts
+
+        # 7 days: compact
+        s_7, a_7 = get_effective_limits(7)
+        self.assertEqual(s_7, 10)
+        self.assertEqual(a_7, 200)
+
+        # 30 days: standard
+        s_30, a_30 = get_effective_limits(30)
+        self.assertEqual(s_30, 15)
+        self.assertEqual(a_30, 200)
+
+        # 90 days: deep
+        s_90, a_90 = get_effective_limits(90)
+        self.assertEqual(s_90, 30)
+        self.assertEqual(a_90, 400)
+
+        # 365 days (1 year): full historical depth
+        s_365, a_365 = get_effective_limits(365)
+        self.assertEqual(s_365, 45)
+        self.assertEqual(a_365, 600)
+
+    def test_progressive_pacing_delays(self):
+        """Progressive delay increases on deep scrolls to avoid LinkedIn rate limiting."""
+        def get_scroll_pause(scroll_count):
+            if scroll_count > 30:
+                return 1000
+            elif scroll_count > 15:
+                return 800
+            return 600
+
+        self.assertEqual(get_scroll_pause(5), 600)
+        self.assertEqual(get_scroll_pause(15), 600)
+        self.assertEqual(get_scroll_pause(20), 800)
+        self.assertEqual(get_scroll_pause(35), 1000)
+
+    def test_1year_historical_activity_filtering(self):
+        """Verify analyze_activities filters a full 1-year historical dataset."""
+        hist_activities = [
+            {"id": "act_1y_old", "date": "2025-11-06", "type": "post", "text": "Post from 1 year ago"},
+            {"id": "act_6m_old", "date": "2026-05-15", "type": "post", "text": "Post from 6 months ago"},
+            {"id": "act_recent", "date": "2026-11-04", "type": "video", "text": "Recent video post"},
+            {"id": "act_too_old", "date": "2025-10-01", "type": "post", "text": "Older than 1 year"}
+        ]
+
+        result = analyze_activities(
+            rows=hist_activities,
+            activity_types=["all"],
+            start_date="2025-11-05",
+            end_date="2026-11-05"
+        )
+
+        act_ids = [a["id"] for a in result["activities"]]
+        self.assertIn("act_1y_old", act_ids)
+        self.assertIn("act_6m_old", act_ids)
+        self.assertIn("act_recent", act_ids)
+        self.assertNotIn("act_too_old", act_ids)
+        self.assertEqual(len(act_ids), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

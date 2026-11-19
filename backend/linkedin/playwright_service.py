@@ -97,13 +97,122 @@ def clear_profile_cache() -> None:
     _RATE_LIMIT_COOLDOWN.clear()
 
 
+def get_active_chrome_cdp_ws_url() -> Optional[str]:
+    """
+    Discovers the active Google Chrome DevTools Protocol WebSocket URL from DevToolsActivePort.
+    Complies with Chrome 144+/157 User-Approved Remote Debugging architecture.
+    Returns: WebSocket URL (e.g. 'ws://127.0.0.1:9222/devtools/browser/<guid>') or None.
+    NEVER logs or exposes the exact browser GUID externally.
+    """
+    candidate_dirs = []
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        candidate_dirs.append(Path(local_app_data) / "Google" / "Chrome" / "User Data")
+    user_prof = os.environ.get("USERPROFILE")
+    if user_prof:
+        candidate_dirs.append(Path(user_prof) / "AppData" / "Local" / "Google" / "Chrome" / "User Data")
+    try:
+        candidate_dirs.append(Path.home() / "AppData" / "Local" / "Google" / "Chrome" / "User Data")
+    except Exception:
+        pass
+
+    for u_dir in candidate_dirs:
+        active_port_file = u_dir / "DevToolsActivePort"
+        if active_port_file.exists():
+            try:
+                lines = active_port_file.read_text(encoding="utf-8", errors="ignore").splitlines()
+                if len(lines) >= 2:
+                    port = lines[0].strip()
+                    browser_path = lines[1].strip()
+                    if port.isdigit() and browser_path.startswith("/devtools/browser/"):
+                        # Verify port is listening locally
+                        import socket
+                        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                        sock.settimeout(1.0)
+                        result = sock.connect_ex(("127.0.0.1", int(port)))
+                        sock.close()
+                        if result == 0:
+                            return f"ws://127.0.0.1:{port}{browser_path}"
+            except Exception:
+                pass
+    return None
+
+
+def is_cdp_available(port: int = 9222, timeout: float = 1.0) -> bool:
+    """Checks whether Google Chrome is actively running with remote debugging enabled."""
+    ws_url = get_active_chrome_cdp_ws_url()
+    if ws_url:
+        return True
+    for host in ("127.0.0.1", "localhost"):
+        try:
+            import urllib.request
+            with urllib.request.urlopen(f"http://{host}:{port}/json/version", timeout=timeout) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            continue
+    return False
+
+
+def validate_cdp_session(port: int = 9222) -> Tuple[str, bool, str]:
+    """
+    Validates whether the active Chrome instance (via CDP) has a live authenticated LinkedIn session.
+    Directly tests live navigation to LinkedIn feed without copying, logging, or exposing any cookies or credentials.
+    Opens only a temporary tab and closes it immediately.
+    Returns: (status: 'VALID' | 'EXPIRED' | 'MISSING' | 'ERROR', is_valid: bool, message: str)
+    """
+    ws_url = get_active_chrome_cdp_ws_url() or f"http://127.0.0.1:{port}"
+    try:
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as p:
+            browser = p.chromium.connect_over_cdp(ws_url, timeout=15000)
+            contexts = browser.contexts
+            if not contexts:
+                browser.close()
+                return "MISSING", False, "No active browser context found in Chrome CDP."
+            ctx = contexts[0]
+            page = ctx.new_page()
+            try:
+                page.goto("https://www.linkedin.com/feed/", timeout=20000, wait_until="domcontentloaded")
+                final_url = page.url.lower()
+                is_auth = "/feed" in final_url and "login" not in final_url and "authwall" not in final_url
+                page.close()
+                browser.close()
+                if is_auth:
+                    return "VALID", True, "Authenticated session confirmed active via existing Chrome session (CDP)"
+                else:
+                    return "EXPIRED", False, "LinkedIn is not currently logged in on the active Chrome profile."
+            except Exception as e:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+                return "ERROR", False, f"Error validating session via CDP: {str(e)}"
+    except Exception as e:
+        return "MISSING", False, f"CDP connection check failed: {str(e)}"
+
+
 def validate_session_state() -> Tuple[str, bool, str]:
     """
-    Validates whether an authenticated session for Aniket Pal is available and valid.
-    Checks SESSION_FILE or LINKEDIN_LI_AT in .env.
-    Returns: (status: 'VALID' | 'EXPIRED' | 'MISSING', is_valid: bool, message: str)
+    Validates whether an authenticated session is available and valid.
+    1. First checks Chrome DevTools Protocol (CDP) on port 9222 for live Chrome session reuse.
+    2. Falls back to SESSION_FILE or LINKEDIN_LI_AT in .env.
     NEVER logs passwords or cookie values.
+    Returns: (status: 'VALID' | 'EXPIRED' | 'MISSING', is_valid: bool, message: str)
     """
+    # 1. Primary: Chrome DevTools Protocol (CDP) reuse
+    if is_cdp_available(port=9222):
+        cdp_status, cdp_valid, cdp_msg = validate_cdp_session(port=9222)
+        if cdp_valid:
+            return cdp_status, cdp_valid, cdp_msg
+        if cdp_status in ("EXPIRED", "ERROR"):
+            return cdp_status, cdp_valid, cdp_msg
+
+    # 2. Secondary: Storage state file or environment variable
     li_at_env = os.getenv("LINKEDIN_LI_AT") or os.getenv("LI_AT")
     if li_at_env and not SESSION_FILE.exists():
         try:
@@ -129,7 +238,7 @@ def validate_session_state() -> Tuple[str, bool, str]:
             pass
 
     if not SESSION_FILE.exists():
-        return "MISSING", False, "LinkedIn authentication/session is unavailable."
+        return "MISSING", False, "LinkedIn authentication/session is unavailable. Launch Chrome with --remote-debugging-port=9222 to connect to your existing session."
 
     try:
         with open(SESSION_FILE, "r", encoding="utf-8") as f:
@@ -615,6 +724,7 @@ def _extract_activities_from_public_html(
                     "comments": 0,
                     "shares": 0,
                     "source": "real_linkedin",
+                    "storage_origin": "live_retrieval",
                     "post_content": original_content,
                     "original_post_text": original_content,
                     "post_author": original_author,
@@ -801,6 +911,7 @@ def _extract_activities_from_public_html(
                     "comments": comments_count,
                     "shares": 0,
                     "source": "real_linkedin",
+                    "storage_origin": "live_retrieval",
                     "post_content": post_text or "Original post content unavailable",
                     "original_post_text": post_text or "Original post content unavailable",
                     "post_author": original_author,
@@ -956,6 +1067,7 @@ def _extract_activities_from_public_html(
                 "comments": comments_count,
                 "shares": 0,
                 "source": "real_linkedin",
+                "storage_origin": "live_retrieval",
                 "post_content": post_text or "Original post content unavailable",
                 "original_post_text": post_text or "Original post content unavailable",
                 "post_author": original_author,
@@ -1032,16 +1144,54 @@ def scrape_linkedin_profile_activities(
     if not slug:
         return make_res(False, [], "Invalid LinkedIn profile URL.", "INVALID_URL", "INVALID")
 
-    # Configurable retrieval ceiling & scroll boundaries
-    effective_max_activities = max_activities if (max_activities and max_activities > 0) else int(os.getenv("LINKEDIN_MAX_ACTIVITIES", "200"))
-    effective_max_scrolls = max_scrolls if (max_scrolls and max_scrolls > 0) else int(os.getenv("LINKEDIN_MAX_SCROLLS", "15"))
+    start_date_obj = to_date_obj(start_date)
+    end_date_obj = to_date_obj(end_date)
+    days_span = (date.today() - start_date_obj).days if start_date_obj else 365
+
+    # Adaptive historical retrieval depth (supports up to 1-year history)
+    is_deep_history = (start_date is None) or (days_span >= 60)
+    is_year_history = (start_date is None) or (days_span >= 180)
+
+    if max_activities and max_activities > 0:
+        effective_max_activities = max_activities
+    else:
+        base_acts = int(os.getenv("LINKEDIN_MAX_ACTIVITIES", "200"))
+        if is_year_history:
+            effective_max_activities = max(base_acts, int(os.getenv("LINKEDIN_YEAR_MAX_ACTIVITIES", "600")))
+        elif is_deep_history:
+            effective_max_activities = max(base_acts, int(os.getenv("LINKEDIN_DEEP_MAX_ACTIVITIES", "400")))
+        else:
+            effective_max_activities = base_acts
+
+    if max_scrolls and max_scrolls > 0:
+        effective_max_scrolls = max_scrolls
+    else:
+        base_scrolls = int(os.getenv("LINKEDIN_MAX_SCROLLS", "15"))
+        if is_year_history:
+            effective_max_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_YEAR_MAX_SCROLLS", "45")))
+        elif is_deep_history:
+            effective_max_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_DEEP_MAX_SCROLLS", "30")))
+        elif days_span <= 7 and days_span > 0:
+            effective_max_scrolls = min(base_scrolls, 10)
+        else:
+            effective_max_scrolls = base_scrolls
 
     # Check authenticated session status
     sess_status, is_auth, sess_msg = validate_session_state()
     dbg(f"[DEBUG] Authenticated session confirmed: {'YES' if is_auth else 'NO'}")
 
-    # Use dedicated activity feed when authenticated, else overview public profile
+    # Use targeted sub-tab activity feed when authenticated, else overview public profile
     target_profile_url = f"https://www.linkedin.com/in/{slug}/recent-activity/all/" if is_auth else f"https://www.linkedin.com/in/{slug}/"
+    if is_auth and activity_types and "all" not in activity_types:
+        norm_types = [str(t).rstrip('s').lower() for t in activity_types if t]
+        if norm_types == ["post"]:
+            target_profile_url = f"https://www.linkedin.com/in/{slug}/recent-activity/posts/"
+        elif norm_types == ["comment"]:
+            target_profile_url = f"https://www.linkedin.com/in/{slug}/recent-activity/comments/"
+        elif norm_types in (["like"], ["reaction"]):
+            target_profile_url = f"https://www.linkedin.com/in/{slug}/recent-activity/reactions/"
+        elif norm_types in (["video"], ["media"]):
+            target_profile_url = f"https://www.linkedin.com/in/{slug}/recent-activity/videos/"
     dbg(f"[DEBUG] requested URL: {profile_url}")
     dbg(f"[DEBUG] normalized URL: {target_profile_url}")
 
@@ -1108,42 +1258,61 @@ def scrape_linkedin_profile_activities(
             context = None
             try:
                 dbg("[DEBUG] Playwright launched: yes")
-                if active_run_id:
-                    start_stage(active_run_id, 3, "Launching Playwright headless browser")
+                ws_endpoint = get_active_chrome_cdp_ws_url()
+                use_cdp = bool(ws_endpoint) or is_cdp_available(port=9222)
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(
-                        headless=True,
-                        args=[
-                            "--disable-blink-features=AutomationControlled",
-                            "--no-sandbox",
-                            "--disable-setuid-sandbox",
-                            "--disable-dev-shm-usage",
-                            "--disable-infobars"
-                        ]
-                    )
+                    if use_cdp:
+                        cdp_target = ws_endpoint or "http://127.0.0.1:9222"
+                        dbg("[DEBUG] Connecting to existing Chrome session via CDP...")
+                        if active_run_id:
+                            start_stage(active_run_id, 1, "Connecting to existing Chrome session via CDP")
+                        browser = p.chromium.connect_over_cdp(cdp_target, timeout=20000)
+                        contexts = browser.contexts
+                        context = contexts[0] if contexts else browser.new_context()
+                        page = context.new_page()
+                        if active_run_id:
+                            complete_stage(active_run_id, 1, details="Connected to existing Chrome session via CDP")
+                    else:
+                        dbg("[DEBUG] Playwright launched: yes")
+                        if active_run_id:
+                            start_stage(active_run_id, 1, "Launching Playwright headless browser")
+                        browser = p.chromium.launch(
+                            headless=True,
+                            args=[
+                                "--disable-blink-features=AutomationControlled",
+                                "--no-sandbox",
+                                "--disable-setuid-sandbox",
+                                "--disable-dev-shm-usage",
+                                "--disable-infobars"
+                            ]
+                        )
 
-                    # Use genuine desktop Chrome User-Agent matching the host platform
-                    desktop_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-                    ctx_kwargs: Dict[str, Any] = {
-                        "user_agent": desktop_ua,
-                        "locale": "en-US",
-                        "viewport": {"width": 1920, "height": 1080},
-                        "extra_http_headers": {
-                            "Accept-Language": "en-US,en;q=0.9",
-                            "Referer": "https://www.google.com/"
+                        # Use genuine desktop Chrome User-Agent matching the host platform
+                        desktop_ua = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                        ctx_kwargs: Dict[str, Any] = {
+                            "user_agent": desktop_ua,
+                            "locale": "en-US",
+                            "viewport": {"width": 1920, "height": 1080},
+                            "extra_http_headers": {
+                                "Accept-Language": "en-US,en;q=0.9",
+                                "Referer": "https://www.google.com/"
+                            }
                         }
-                    }
 
-                    if is_auth and SESSION_FILE.exists():
-                        ctx_kwargs["storage_state"] = str(SESSION_FILE)
+                        if is_auth and SESSION_FILE.exists():
+                            ctx_kwargs["storage_state"] = str(SESSION_FILE)
 
-                    context = browser.new_context(**ctx_kwargs)
-                    context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
-                    page = context.new_page()
+                        context = browser.new_context(**ctx_kwargs)
+                        context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                        page = context.new_page()
+
+                        if active_run_id:
+                            complete_stage(active_run_id, 1, details="Playwright Chromium launched successfully")
 
                     if active_run_id:
-                        complete_stage(active_run_id, 3, details="Playwright Chromium launched successfully")
-                        start_stage(active_run_id, 4, f"Navigating to {target_profile_url}")
+                        start_stage(active_run_id, 2, "Validating LinkedIn session state")
+                        complete_stage(active_run_id, 2, details="Session validated" if is_auth else "Public guest mode")
+                        start_stage(active_run_id, 3, f"Loading profile feed: {target_profile_url}")
 
                     dbg(f"[DEBUG] LinkedIn navigation started: {target_profile_url}")
                     nav_status = None
@@ -1168,7 +1337,7 @@ def scrape_linkedin_profile_activities(
                     dbg(f"[DEBUG] final URL after redirects: {final_url}")
                     dbg(f"[DEBUG] page title: {page_title}")
                     if active_run_id:
-                        complete_stage(active_run_id, 4, details=f"Status: {nav_status} | Title: {page_title[:40] if page_title else 'N/A'}")
+                        complete_stage(active_run_id, 3, details=f"Status: {nav_status} | Title: {page_title[:40] if page_title else 'N/A'}")
 
                     if nav_error and not page_title:
                         dbg(f"[DEBUG] Retrieval failure reason: Navigation error: {nav_error}")
@@ -1179,7 +1348,20 @@ def scrape_linkedin_profile_activities(
 
                     # Check for HTTP 404 or Profile Not Found / Page Not Found
                     is_not_found = (nav_status == 404) or ("profile not found" in title_lower) or ("page not found" in title_lower)
-                    if is_not_found and target_profile_url.endswith("/recent-activity/all/"):
+                    if is_not_found and "/recent-activity/" in target_profile_url and not target_profile_url.endswith("/recent-activity/all/"):
+                        try:
+                            dbg(f"[DEBUG] sub-tab {target_profile_url} returned 404, falling back to recent-activity/all/ for {slug}")
+                            all_resp = page.goto(f"https://www.linkedin.com/in/{slug}/recent-activity/all/", timeout=timeout_ms, wait_until="domcontentloaded")
+                            if all_resp:
+                                nav_status = all_resp.status
+                            final_url = page.url
+                            page_title = page.title()
+                            final_lower = final_url.lower()
+                            title_lower = (page_title or "").lower()
+                            is_not_found = (nav_status == 404) or ("profile not found" in title_lower) or ("page not found" in title_lower)
+                        except Exception as fb_err:
+                            dbg(f"[DEBUG] recent-activity/all/ fallback failed: {fb_err}")
+                    if is_not_found and "/recent-activity/" in target_profile_url:
                         try:
                             dbg(f"[DEBUG] recent-activity/all/ returned 404, falling back to base profile URL for {slug}")
                             base_resp = page.goto(f"https://www.linkedin.com/in/{slug}/", timeout=timeout_ms, wait_until="domcontentloaded")
@@ -1244,10 +1426,10 @@ def scrape_linkedin_profile_activities(
                     stagnant_count = 0
 
                     if active_run_id:
-                        start_stage(active_run_id, 5, f"Scrolling feed (limit: {effective_max_scrolls} scrolls)")
+                        start_stage(active_run_id, 4, f"Extracting activities from feed (limit: {effective_max_scrolls} scrolls)")
 
                     try:
-                        page.wait_for_timeout(800)
+                        page.wait_for_timeout(400)
                         while scroll_count < effective_max_scrolls:
                             scroll_count += 1
 
@@ -1266,14 +1448,23 @@ def scrape_linkedin_profile_activities(
                                 window.scrollBy(0, 1200);
                                 return document.body.scrollHeight;
                             }""")
-                            page.wait_for_timeout(600)
+                            # Adaptive scroll pause: quick for early cards, gentle scaling for deep history to avoid rate limits
+                            if scroll_count <= 5:
+                                scroll_pause = 350
+                            elif scroll_count <= 20:
+                                scroll_pause = 500
+                            elif scroll_count <= 35:
+                                scroll_pause = 750
+                            else:
+                                scroll_pause = 950
+                            page.wait_for_timeout(scroll_pause)
 
                             # Click "Show more results" button if present
                             try:
                                 load_more = page.query_selector("button.feed-load-more-button, button:has-text('Show more results'), button:has-text('Load more')")
                                 if load_more and load_more.is_visible():
                                     load_more.click()
-                                    page.wait_for_timeout(800)
+                                    page.wait_for_timeout(600)
                             except Exception:
                                 pass
 
@@ -1287,8 +1478,8 @@ def scrape_linkedin_profile_activities(
                                 stagnant_count = 0
                                 last_height = new_height
 
-                            # Check date boundary strictly on actual activity feed cards
-                            if start_date_obj:
+                            # Check date boundary on actual activity feed cards (throttled every 2 scrolls to optimize speed)
+                            if start_date_obj and (scroll_count % 2 == 0 or stagnant_count > 0 or scroll_count >= effective_max_scrolls - 1):
                                 time_texts = page.evaluate("""() => {
                                     // Target actual LinkedIn activity feed cards only
                                     const cardSelectors = [
@@ -1337,12 +1528,12 @@ def scrape_linkedin_profile_activities(
                                         dbg(f"[DEBUG] Reached start date boundary ({oldest_card_date.isoformat()} < {start_date_obj.isoformat()}) from activity cards at scroll {scroll_count}")
                                         break
 
-                        page.wait_for_timeout(500)
+                        page.wait_for_timeout(300)
                     except Exception as se:
                         dbg(f"[DEBUG] Scroll / pagination notice: {se}")
 
                     if active_run_id:
-                        complete_stage(active_run_id, 5, items_count=scroll_count, details=f"Scrolled {scroll_count} times, feed reached {'end' if reached_end_of_feed else ('date boundary' if reached_start_date_boundary else 'scroll limit')}")
+                        complete_stage(active_run_id, 4, items_count=scroll_count, details=f"Scrolled {scroll_count} times, feed reached {'end' if reached_end_of_feed else ('date boundary' if reached_start_date_boundary else 'scroll limit')}")
 
                     # Safely retrieve page HTML content
                     try:
@@ -1370,6 +1561,11 @@ def scrape_linkedin_profile_activities(
                 dbg(f"[DEBUG] Retrieval failure reason: (G) Playwright / browser failure: {e}")
                 return make_res(False, [], "Activity could not be retrieved from LinkedIn. Browser automation error.", "AUTOMATION_ERROR", "FAILED")
             finally:
+                if use_cdp and page:
+                    try:
+                        page.close()
+                    except Exception:
+                        pass
                 if browser:
                     try:
                         browser.close()
@@ -1437,7 +1633,7 @@ def scrape_linkedin_profile_activities(
 
         # Parse and extract all activities from DOM
         if active_run_id:
-            start_stage(active_run_id, 6, "Extracting activity cards, media, and videos from DOM")
+            start_stage(active_run_id, 5, "Classifying activities by type (posts, comments, reactions, videos)")
 
         sec_count, elem_count, extracted_raw = _extract_activities_from_public_html(
             page_html=page_html,
@@ -1449,7 +1645,8 @@ def scrape_linkedin_profile_activities(
 
         if active_run_id:
             v_cnt = sum(1 for a in extracted_raw if a.get("type") == "video" or a.get("video_url") or a.get("video_thumbnail"))
-            complete_stage(active_run_id, 6, items_count=len(extracted_raw), details=f"Extracted {len(extracted_raw)} activities ({v_cnt} videos)")
+            complete_stage(active_run_id, 5, items_count=len(extracted_raw), details=f"Classified {len(extracted_raw)} activities ({v_cnt} videos)")
+            start_stage(active_run_id, 6, "Parsing and validating activity dates")
 
         has_posts = any(a.get("type") == "post" for a in extracted_raw)
         has_comments = any(a.get("type") == "comment" for a in extracted_raw)
@@ -1481,6 +1678,8 @@ def scrape_linkedin_profile_activities(
         # Safe diagnostic logging: compute newest and oldest extracted date bounds before filtering
         valid_dates = [to_date_obj(a.get("date")) for a in extracted_raw if to_date_obj(a.get("date"))]
         valid_dates = [d for d in valid_dates if d is not None]
+        if active_run_id:
+            complete_stage(active_run_id, 6, items_count=len(valid_dates), details=f"Validated {len(valid_dates)} activity timestamps")
         if valid_dates:
             newest = max(valid_dates).isoformat()
             oldest = min(valid_dates).isoformat()

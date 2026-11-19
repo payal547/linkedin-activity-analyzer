@@ -208,6 +208,55 @@ def save_profile_successful_analysis(slug_or_url: str, analysis_data: Dict[str, 
         if "videos_count" not in clean_copy:
             clean_copy["videos_count"] = by_type.get("video", 0) + by_type.get("videos", 0)
 
+    # Merge with previous historical activities so history accumulates up to 1+ years
+    try:
+        existing_entry = load_profile_successful_analysis(slug)
+        if existing_entry and isinstance(existing_entry.get("activities"), list) and len(existing_entry["activities"]) > 0:
+            existing_acts = existing_entry["activities"]
+            new_acts = clean_copy.get("activities", [])
+            merged_map = {}
+            for a in existing_acts:
+                if not a.get("storage_origin"):
+                    a["storage_origin"] = "historical_mongodb"
+                key = a.get("id") or f"{a.get('type')}_{a.get('date')}_{a.get('text', '')[:40]}"
+                merged_map[key] = a
+            for a in new_acts:
+                if not a.get("storage_origin"):
+                    a["storage_origin"] = "live_retrieval"
+                key = a.get("id") or f"{a.get('type')}_{a.get('date')}_{a.get('text', '')[:40]}"
+                merged_map[key] = a
+            merged_acts = sorted(
+                list(merged_map.values()),
+                key=lambda x: str(x.get("date") or ""),
+                reverse=True
+            )
+            clean_copy["activities"] = merged_acts
+            clean_copy["total_activities"] = len(merged_acts)
+            clean_copy["historical_count"] = sum(1 for a in merged_acts if a.get("storage_origin") == "historical_mongodb")
+            clean_copy["live_count"] = sum(1 for a in merged_acts if a.get("storage_origin") == "live_retrieval")
+
+            # Update by_type counts across all merged activities
+            by_t = {}
+            for a in merged_acts:
+                t = (a.get("action_type") or a.get("type") or "post").lower()
+                by_t[t] = by_t.get(t, 0) + 1
+            clean_copy["by_type"] = by_t
+            clean_copy["posts_count"] = by_t.get("post", 0) + by_t.get("posts", 0)
+            clean_copy["comments_count"] = by_t.get("comment", 0) + by_t.get("comments", 0)
+            clean_copy["likes_count"] = by_t.get("like", 0) + by_t.get("likes", 0)
+            clean_copy["shares_count"] = by_t.get("share", 0) + by_t.get("shares", 0)
+            clean_copy["videos_count"] = by_t.get("video", 0) + by_t.get("videos", 0)
+
+            # Recalculate date range to cover the entire accumulated historical span
+            valid_dates = [a.get("date") for a in merged_acts if a.get("date")]
+            if valid_dates:
+                clean_copy["date_range"] = {
+                    "start": min(valid_dates),
+                    "end": max(valid_dates)
+                }
+    except Exception as merge_err:
+        logger.warning("Historical activity merge notice for %s: %s", slug, merge_err)
+
     # 1. Primary write to MongoDB
     coll, _ = _get_history_coll()
     if coll is not None:

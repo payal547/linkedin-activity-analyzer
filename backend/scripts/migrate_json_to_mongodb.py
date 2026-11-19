@@ -52,7 +52,7 @@ except ImportError:
     from backend.config import settings
 
 DEFAULT_DATA_DIR = BACKEND_DIR / "data"
-DEFAULT_BACKUP_ROOT = PROJECT_ROOT.parent
+DEFAULT_BACKUP_ROOT = PROJECT_ROOT.parent / "archive" / "workspace-backups"
 
 
 def compute_sha256(file_path: Path) -> str:

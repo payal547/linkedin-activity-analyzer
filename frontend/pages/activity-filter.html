@@ -15,12 +15,12 @@
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
             min-height: 100vh;
-            background: #f3f6f8;
-            color: #222;
+            background: linear-gradient(145deg, #eef5fb 0%, #f8fafc 48%, #eef2ff 100%);
+            color: #172033;
         }
 
         .header {
-            background: #0a66c2;
+            background: linear-gradient(110deg, #084f96, #0a66c2 58%, #1684cb);
             color: white;
             padding: 16px 40px;
             display: flex;
@@ -45,17 +45,16 @@
         }
 
         .container {
-            width: 90%;
-            max-width: 720px;
-            margin: 35px auto;
+            width: min(94%, 900px);
+            margin: 38px auto;
         }
 
         .card {
             background: white;
-            padding: 35px;
-            border-radius: 14px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
-            border: 1px solid #e1e9ee;
+            padding: 34px 38px;
+            border-radius: 18px;
+            box-shadow: 0 18px 50px rgba(15, 39, 72, 0.10);
+            border: 1px solid rgba(203, 213, 225, 0.8);
         }
 
         h2 {
@@ -146,6 +145,10 @@
 
         .section {
             margin-bottom: 26px;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            background: #fbfdff;
         }
 
         .section h3 {
@@ -160,6 +163,13 @@
             grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
             gap: 8px;
             margin-bottom: 14px;
+        }
+
+        .range-helper {
+            color: #64748b;
+            font-size: 12px;
+            line-height: 1.5;
+            margin: -3px 0 13px;
         }
 
         .preset-btn {
@@ -324,6 +334,7 @@
 
         .continue-btn:hover {
             background: #004182;
+            box-shadow: 0 8px 18px rgba(10, 102, 194, 0.2);
         }
 
         .continue-btn:disabled {
@@ -354,7 +365,82 @@
             display: none;
         }
 
+        /* YouTube-Style Live Top Progress Bar */
+        .yt-progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            width: 0%;
+            background: #ff0000;
+            box-shadow: 0 0 10px rgba(255, 0, 0, 0.85), 0 0 5px rgba(255, 0, 0, 0.5);
+            z-index: 999999;
+            transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
+            pointer-events: none;
+        }
+
+        .yt-progress-bar.indeterminate {
+            animation: ytShimmer 1.8s infinite ease-in-out;
+        }
+
+        @keyframes ytShimmer {
+            0% { opacity: 0.65; filter: brightness(1); }
+            50% { opacity: 1.0; filter: brightness(1.35); }
+            100% { opacity: 0.65; filter: brightness(1); }
+        }
+
+        .yt-progress-bar.error-bar {
+            background: #dc2626 !important;
+            box-shadow: 0 0 10px rgba(220, 38, 38, 0.9) !important;
+        }
+
+        .yt-progress-chip {
+            position: fixed;
+            top: 12px;
+            right: 20px;
+            z-index: 999998;
+            background: rgba(15, 23, 42, 0.94);
+            backdrop-filter: blur(8px);
+            color: #ffffff;
+            padding: 7px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+            border: 1px solid rgba(255, 255, 255, 0.15);
+            transition: opacity 0.3s ease;
+        }
+
+        .yt-spinner {
+            width: 13px;
+            height: 13px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: #ff0000;
+            border-radius: 50%;
+            animation: ytSpin 0.7s linear infinite;
+            flex-shrink: 0;
+        }
+
+        @keyframes ytSpin {
+            to { transform: rotate(360deg); }
+        }
+
+        .yt-chip-profile {
+            background: rgba(255, 255, 255, 0.18);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            color: #f1f5f9;
+        }
+
         @media (max-width: 600px) {
+            .container { width: calc(100% - 24px); margin: 18px auto; }
+            .card { padding: 22px 18px; }
+            .header { padding: 14px 18px; }
+            .section { padding: 16px 13px; }
             .date-inputs-row, .activities-grid {
                 grid-template-columns: 1fr;
             }
@@ -362,6 +448,14 @@
     </style>
 </head>
 <body>
+
+    <!-- YouTube-Style Live Top Progress Bar -->
+    <div id="ytAnalysisProgressBar" class="yt-progress-bar" style="display: none;"></div>
+    <div id="ytAnalysisProgressChip" class="yt-progress-chip" style="display: none;">
+        <span class="yt-spinner"></span>
+        <span class="yt-chip-text" id="ytChipText">Connecting to Chrome (5%)...</span>
+        <span class="yt-chip-profile" id="ytChipProfile" style="display: none;"></span>
+    </div>
 
 <header class="header">
     <h1>LinkedIn Activity Analyzer</h1>
@@ -408,8 +502,11 @@
                 <button type="button" class="preset-btn" onclick="applyDatePreset('7days')">Last 7 Days</button>
                 <button type="button" class="preset-btn" onclick="applyDatePreset('10days')">Last 10 Days</button>
                 <button type="button" class="preset-btn active" onclick="applyDatePreset('30days')">Last 30 Days</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('1year')">Last 1 Year</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('older1year')">1-2 Years Ago</button>
                 <button type="button" class="preset-btn" id="customPresetBtn" onclick="applyDatePreset('custom')">Custom Range</button>
             </div>
+            <p class="range-helper">Choose any dates to inspect that part of the profile timeline. “1-2 Years Ago” is a quick way to find older activity.</p>
 
             <!-- Radio option for compatibility with existing tests expecting input[value="30days"] -->
             <div style="display:none;">
@@ -417,6 +514,7 @@
                 <input type="radio" name="dateType" value="current">
                 <input type="radio" name="dateType" value="7days">
                 <input type="radio" name="dateType" value="10days">
+                <input type="radio" name="dateType" value="1year">
                 <input type="radio" name="dateType" value="custom">
                 <input type="radio" name="dateType" value="range">
             </div>

@@ -126,6 +126,14 @@ function calculatePresetDates(preset) {
     } else if (preset === "30days") {
         // Last 30 Days: 30 days inclusive (today minus 29 days, e.g. 04/11/2026 -> 06/10/2026)
         start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 29);
+    } else if (preset === "1year" || preset === "365days") {
+        // Last 1 Year: 365 days inclusive (today minus 364 days, up to 1 full previous year)
+        start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 364);
+    } else if (preset === "older1year") {
+        // The complete year before the most recent year.
+        end.setFullYear(end.getFullYear() - 1);
+        start = new Date(end);
+        start.setFullYear(start.getFullYear() - 1);
     } else if (preset === "all") {
         return {
             start: null,
@@ -236,6 +244,8 @@ function updatePresetButtonUI(activePreset) {
         else if (activePreset === "7days" && text.includes("7")) match = true;
         else if (activePreset === "10days" && text.includes("10")) match = true;
         else if (activePreset === "30days" && text.includes("30")) match = true;
+        else if ((activePreset === "1year" || activePreset === "365days") && (text.includes("1 year") || text.includes("year"))) match = true;
+        else if (activePreset === "older1year" && text.includes("1-2 years")) match = true;
         else if (activePreset === "custom" && (text.includes("custom") || text.includes("manual"))) match = true;
 
         if (match) {
@@ -274,6 +284,8 @@ function onCustomDateChange() {
         const p7 = calculatePresetDates("7days");
         const p10 = calculatePresetDates("10days");
         const p30 = calculatePresetDates("30days");
+        const p1year = calculatePresetDates("1year");
+        const pOlder1Year = calculatePresetDates("older1year");
 
         if (startVal === pToday.startDDMMYYYY && endVal === pToday.endDDMMYYYY) {
             matchedPreset = "today";
@@ -283,6 +295,10 @@ function onCustomDateChange() {
             matchedPreset = "10days";
         } else if (startVal === p30.startDDMMYYYY && endVal === p30.endDDMMYYYY) {
             matchedPreset = "30days";
+        } else if (startVal === p1year.startDDMMYYYY && endVal === p1year.endDDMMYYYY) {
+            matchedPreset = "1year";
+        } else if (startVal === pOlder1Year.startDDMMYYYY && endVal === pOlder1Year.endDDMMYYYY) {
+            matchedPreset = "older1year";
         }
     }
 
@@ -476,6 +492,8 @@ async function analyzeActivity() {
         submitBtn.textContent = "Analyzing Activity...";
     }
 
+    startYouTubeProgressBar("Connecting to Chrome (5%)...");
+
     try {
         const response = await fetch("/api/analyze", {
             method: "POST",
@@ -491,6 +509,8 @@ async function analyzeActivity() {
             throw new Error(result.error || "Activity analysis failed.");
         }
 
+        completeYouTubeProgressBar();
+
         try {
             sessionStorage.setItem("selectedProfile", JSON.stringify(selectedProfile));
             sessionStorage.setItem("currentAnalysis", JSON.stringify(result));
@@ -501,18 +521,20 @@ async function analyzeActivity() {
         }
 
         // Navigate to Dashboard
-        window.location.href = "/dashboard";
+        setTimeout(() => {
+            window.location.href = "/dashboard";
+        }, 700);
 
     } catch (err) {
         const isNetworkError = (err instanceof TypeError && err.message &&
             (err.message.toLowerCase().includes("fetch") ||
              err.message.toLowerCase().includes("network") ||
              err.message.toLowerCase().includes("failed")));
-        if (isNetworkError) {
-            showError("⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000, then try again.");
-        } else {
-            showError(err.message);
-        }
+        const msg = isNetworkError
+            ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000, then try again."
+            : err.message;
+        errorYouTubeProgressBar(msg);
+        showError(msg);
     } finally {
         if (submitBtn) {
             submitBtn.disabled = false;
@@ -527,4 +549,141 @@ function showError(msg) {
         errorEl.textContent = msg;
         errorEl.style.display = "block";
     }
+}
+
+/* YouTube-Style Live Top Progress Bar Controller */
+let _ytPollInterval = null;
+
+function startYouTubeProgressBar(initialText = "Connecting to Chrome (5%)...", targetRunId = null) {
+    const bar = document.getElementById("ytAnalysisProgressBar");
+    const chip = document.getElementById("ytAnalysisProgressChip");
+    const textEl = document.getElementById("ytChipText");
+    const profEl = document.getElementById("ytChipProfile");
+
+    if (bar) {
+        bar.className = "yt-progress-bar";
+        bar.style.width = "4%";
+        bar.style.opacity = "1";
+        bar.style.display = "block";
+    }
+    if (chip) {
+        chip.style.display = "flex";
+        chip.style.opacity = "1";
+    }
+    if (textEl) {
+        textEl.textContent = initialText;
+    }
+    if (profEl) {
+        profEl.style.display = "none";
+    }
+
+    if (_ytPollInterval) clearInterval(_ytPollInterval);
+
+    _ytPollInterval = setInterval(async () => {
+        try {
+            const endpoint = targetRunId ? `/api/pipeline/${encodeURIComponent(targetRunId)}` : "/api/pipeline/latest";
+            const res = await fetch(endpoint);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || data.status === "no_runs") return;
+
+            const pct = Math.min(95, Math.max(4, Number(data.progress_percentage) || 4));
+            const stName = data.current_stage_name || "Analyzing Profile";
+            const isIndeterminate = Boolean(data.is_indeterminate);
+
+            if (bar) {
+                bar.style.width = `${pct}%`;
+                if (isIndeterminate) {
+                    bar.classList.add("indeterminate");
+                } else {
+                    bar.classList.remove("indeterminate");
+                }
+            }
+
+            if (textEl) {
+                textEl.textContent = `${stName} (${pct}%)`;
+            }
+
+            if (profEl && data.total_profiles && data.total_profiles > 1) {
+                profEl.style.display = "inline-block";
+                const pIdx = data.current_profile_index || 1;
+                const pTot = data.total_profiles;
+                const pName = data.current_profile_name ? `: ${data.current_profile_name}` : "";
+                profEl.textContent = `Profile ${pIdx} of ${pTot}${pName}`;
+            }
+
+            if (data.status === "completed" || data.progress_percentage >= 100) {
+                completeYouTubeProgressBar();
+            } else if (data.status === "failed") {
+                errorYouTubeProgressBar("Analysis failed");
+            }
+        } catch (e) {
+            // Non-blocking poll exception
+        }
+    }, 300);
+}
+
+function completeYouTubeProgressBar() {
+    if (_ytPollInterval) {
+        clearInterval(_ytPollInterval);
+        _ytPollInterval = null;
+    }
+    const bar = document.getElementById("ytAnalysisProgressBar");
+    const chip = document.getElementById("ytAnalysisProgressChip");
+    const textEl = document.getElementById("ytChipText");
+
+    if (bar) {
+        bar.classList.remove("indeterminate");
+        bar.style.width = "100%";
+    }
+    if (textEl) {
+        textEl.textContent = "Preparing Dashboard (100%)";
+    }
+    setTimeout(() => {
+        if (chip) {
+            chip.style.opacity = "0";
+            setTimeout(() => { chip.style.display = "none"; }, 300);
+        }
+        if (bar) {
+            bar.style.opacity = "0";
+            setTimeout(() => {
+                bar.style.display = "none";
+                bar.style.opacity = "1";
+                bar.style.width = "0%";
+            }, 300);
+        }
+    }, 700);
+}
+
+function errorYouTubeProgressBar(msg = "Analysis failed") {
+    if (_ytPollInterval) {
+        clearInterval(_ytPollInterval);
+        _ytPollInterval = null;
+    }
+    const bar = document.getElementById("ytAnalysisProgressBar");
+    const chip = document.getElementById("ytAnalysisProgressChip");
+    const textEl = document.getElementById("ytChipText");
+
+    if (bar) {
+        bar.classList.remove("indeterminate");
+        bar.classList.add("error-bar");
+    }
+    if (textEl) {
+        textEl.textContent = `⚠️ ${msg}`;
+    }
+    setTimeout(() => {
+        if (chip) {
+            chip.style.opacity = "0";
+            setTimeout(() => { chip.style.display = "none"; }, 300);
+        }
+        if (bar) {
+            bar.style.opacity = "0";
+            setTimeout(() => {
+                bar.style.display = "none";
+                bar.style.opacity = "1";
+                bar.classList.remove("error-bar");
+                bar.style.width = "0%";
+            }, 300);
+        }
+    }, 4000);
 }

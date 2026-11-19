@@ -2354,7 +2354,15 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
             </div>
 
-            ${isHistorical ? '<span class="historical-badge" style="margin-left:auto; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:4px; font-size:11px; font-weight:700; padding:2px 8px; align-self:flex-start;">🕒 HISTORICAL RECORD</span>' : ''}
+            ${(() => {
+                const origin = act.storage_origin;
+                if (origin === "live_retrieval") {
+                    return '<span class="live-retrieval-badge" style="margin-left:auto; background:#ecfdf5; color:#065f46; border:1px solid #a7f3d0; border-radius:4px; font-size:11px; font-weight:700; padding:2px 8px; align-self:flex-start;" title="Retrieved in live session scan">⚡ LIVE RETRIEVED</span>';
+                } else if (isHistorical || origin === "historical_mongodb" || act.is_historical) {
+                    return '<span class="historical-badge" style="margin-left:auto; background:#f1f5f9; color:#475569; border:1px solid #cbd5e1; border-radius:4px; font-size:11px; font-weight:700; padding:2px 8px; align-self:flex-start;" title="Preserved from previous MongoDB scan">🕒 HISTORICAL (MongoDB)</span>';
+                }
+                return '';
+            })()}
 
         </div>
 
@@ -2709,8 +2717,139 @@ function escapeAttr(str) {
         .replace(/>/g, "&gt;");
 
 }
+/* YouTube-Style Live Top Progress Bar Controller */
+let _ytPollInterval = null;
 
+function startYouTubeProgressBar(initialText = "Connecting to Chrome (5%)...", targetRunId = null) {
+    const bar = document.getElementById("ytAnalysisProgressBar");
+    const chip = document.getElementById("ytAnalysisProgressChip");
+    const textEl = document.getElementById("ytChipText");
+    const profEl = document.getElementById("ytChipProfile");
 
+    if (bar) {
+        bar.className = "yt-progress-bar";
+        bar.style.width = "4%";
+        bar.style.opacity = "1";
+        bar.style.display = "block";
+    }
+    if (chip) {
+        chip.style.display = "flex";
+        chip.style.opacity = "1";
+    }
+    if (textEl) {
+        textEl.textContent = initialText;
+    }
+    if (profEl) {
+        profEl.style.display = "none";
+    }
 
+    if (_ytPollInterval) clearInterval(_ytPollInterval);
 
+    _ytPollInterval = setInterval(async () => {
+        try {
+            const endpoint = targetRunId ? `/api/pipeline/${encodeURIComponent(targetRunId)}` : "/api/pipeline/latest";
+            const res = await fetch(endpoint);
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data || data.status === "no_runs") return;
 
+            const pct = Math.min(95, Math.max(4, Number(data.progress_percentage) || 4));
+            const stName = data.current_stage_name || "Analyzing Profile";
+            const isIndeterminate = Boolean(data.is_indeterminate);
+
+            if (bar) {
+                bar.style.width = `${pct}%`;
+                if (isIndeterminate) {
+                    bar.classList.add("indeterminate");
+                } else {
+                    bar.classList.remove("indeterminate");
+                }
+            }
+
+            if (textEl) {
+                textEl.textContent = `${stName} (${pct}%)`;
+            }
+
+            if (profEl && data.total_profiles && data.total_profiles > 1) {
+                profEl.style.display = "inline-block";
+                const pIdx = data.current_profile_index || 1;
+                const pTot = data.total_profiles;
+                const pName = data.current_profile_name ? `: ${data.current_profile_name}` : "";
+                profEl.textContent = `Profile ${pIdx} of ${pTot}${pName}`;
+            }
+
+            if (data.status === "completed" || data.progress_percentage >= 100) {
+                completeYouTubeProgressBar();
+            } else if (data.status === "failed") {
+                errorYouTubeProgressBar("Analysis failed");
+            }
+        } catch (e) {
+            // Non-blocking poll exception
+        }
+    }, 300);
+}
+
+function completeYouTubeProgressBar() {
+    if (_ytPollInterval) {
+        clearInterval(_ytPollInterval);
+        _ytPollInterval = null;
+    }
+    const bar = document.getElementById("ytAnalysisProgressBar");
+    const chip = document.getElementById("ytAnalysisProgressChip");
+    const textEl = document.getElementById("ytChipText");
+
+    if (bar) {
+        bar.classList.remove("indeterminate");
+        bar.style.width = "100%";
+    }
+    if (textEl) {
+        textEl.textContent = "Preparing Dashboard (100%)";
+    }
+    setTimeout(() => {
+        if (chip) {
+            chip.style.opacity = "0";
+            setTimeout(() => { chip.style.display = "none"; }, 300);
+        }
+        if (bar) {
+            bar.style.opacity = "0";
+            setTimeout(() => {
+                bar.style.display = "none";
+                bar.style.opacity = "1";
+                bar.style.width = "0%";
+            }, 300);
+        }
+    }, 700);
+}
+
+function errorYouTubeProgressBar(msg = "Analysis failed") {
+    if (_ytPollInterval) {
+        clearInterval(_ytPollInterval);
+        _ytPollInterval = null;
+    }
+    const bar = document.getElementById("ytAnalysisProgressBar");
+    const chip = document.getElementById("ytAnalysisProgressChip");
+    const textEl = document.getElementById("ytChipText");
+
+    if (bar) {
+        bar.classList.remove("indeterminate");
+        bar.classList.add("error-bar");
+    }
+    if (textEl) {
+        textEl.textContent = `⚠️ ${msg}`;
+    }
+    setTimeout(() => {
+        if (chip) {
+            chip.style.opacity = "0";
+            setTimeout(() => { chip.style.display = "none"; }, 300);
+        }
+        if (bar) {
+            bar.style.opacity = "0";
+            setTimeout(() => {
+                bar.style.display = "none";
+                bar.style.opacity = "1";
+                bar.classList.remove("error-bar");
+                bar.style.width = "0%";
+            }, 300);
+        }
+    }, 4000);
+}
