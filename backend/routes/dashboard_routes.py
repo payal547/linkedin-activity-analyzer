@@ -3,6 +3,7 @@ import logging
 from flask import Blueprint, jsonify, request, session
 from services.analysis_storage import load_latest_analysis
 from services import dashboard_analytics_service as analytics
+from services.video_embeds_storage import canonical_linkedin_post_url, save_video_embed
 
 dashboard_bp = Blueprint("dashboard", __name__)
 logger = logging.getLogger(__name__)
@@ -96,6 +97,38 @@ def content():
         page=request.args.get("page", 1, type=int) or 1,
         per_page=request.args.get("per_page", 20, type=int) or 20,
     ))
+
+
+@dashboard_bp.route("/api/dashboard/video-embeds", methods=["POST"])
+def save_content_video_embed():
+    payload = request.get_json(silent=True) or {}
+    profile_slug = str(payload.get("profile_slug") or "").strip().lower()
+    try:
+        canonical_post = canonical_linkedin_post_url(payload.get("post_url"))
+        page = 1
+        match = None
+        while page <= 100:
+            result = analytics.list_content(profile_slug=profile_slug, kind="video", page=page, per_page=100)
+            for row in result.get("items", []):
+                candidate = row.get("linkedin_post_url") or row.get("original_post_url") or row.get("post_url")
+                try:
+                    if canonical_linkedin_post_url(candidate) == canonical_post:
+                        match = row
+                        break
+                except ValueError:
+                    continue
+            if match or page >= result.get("total_pages", 1):
+                break
+            page += 1
+        if not match:
+            return jsonify({"error": "That LinkedIn video is not in the selected saved profile’s library."}), 404
+        saved = save_video_embed(profile_slug, canonical_post, payload.get("embed_code"))
+        return jsonify({"saved": True, "embed_src": saved["embed_src"]})
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    except Exception:
+        logger.exception("LinkedIn video embed save failed")
+        return jsonify({"error": "The embed could not be saved right now."}), 503
 
 
 @dashboard_bp.route("/api/dashboard/trends", methods=["GET"])

@@ -7,7 +7,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from services import dashboard_analytics_service as analytics
 from services.analysis_runs_storage import save_analysis_run
+from services.video_embeds_storage import canonical_linkedin_post_url, parse_official_embed_src, save_video_embed
 from app import app as flask_app
+from routes import dashboard_routes
 
 
 class FakeCursor(list):
@@ -54,6 +56,13 @@ class FakeCollection:
             raise error
         self.rows.append(dict(doc))
 
+    def update_one(self, query, update, upsert=False):
+        match = next((row for row in self.rows if all(row.get(key) == value for key, value in query.items())), None)
+        if match is not None:
+            match.update(update.get("$set", {}))
+        elif upsert:
+            self.rows.append(dict(update.get("$set", {})))
+
 
 class FakeDB(dict):
     def __getitem__(self, name):
@@ -77,6 +86,7 @@ def fixture_db():
         ]),
         "activities": FakeCollection(),
         "imported_activities": FakeCollection(),
+        "activity_video_embeds": FakeCollection(),
     })
 
 
@@ -197,6 +207,36 @@ class TestDashboardAnalytics(unittest.TestCase):
                     self.assertEqual(first["filters"]["from"], "2026-11-01")
                     self.assertEqual(first["items"][0]["activity_kind"], expected_action)
 
+    def test_official_embed_is_validated_and_scoped_to_profile_post(self):
+        post_url = "https://www.linkedin.com/posts/alpha_example-activity-123"
+        embed_src = "https://www.linkedin.com/embed/feed/update/urn:li:share:123?collapsed=1"
+        self.assertEqual(parse_official_embed_src(f'<iframe src="{embed_src}" height="500"></iframe>'), embed_src)
+        self.assertEqual(canonical_linkedin_post_url(post_url), post_url)
+        with self.assertRaises(ValueError):
+            parse_official_embed_src('<iframe src="https://evil.example/embed/feed/update/urn:li:share:123"></iframe>')
+
+        db = fixture_db()
+        db["profile_analysis_history"].rows = [{
+            "slug": "alpha", "subject_name": "Alpha", "subject_url": "https://www.linkedin.com/in/alpha/",
+            "activities": [{"id": "video-123", "type": "video", "date": "2026-11-10", "is_video": True, "post_url": post_url}],
+        }]
+        db["activity_video_embeds"].rows = [{"profile_slug": "alpha", "post_url": post_url, "embed_src": embed_src}]
+        with patch.object(analytics, "get_db", return_value=db):
+            alpha = analytics.list_content(profile_slug="alpha", kind="video")
+            beta = analytics.list_content(profile_slug="beta", kind="video")
+        self.assertEqual(alpha["items"][0]["embed_src"], embed_src)
+        self.assertEqual(beta["items"], [])
+
+    def test_saving_embed_adds_only_to_separate_embed_collection(self):
+        db = fixture_db()
+        post_url = "https://www.linkedin.com/posts/alpha_example-activity-123"
+        embed_src = "https://www.linkedin.com/embed/feed/update/urn:li:share:123"
+        with patch("services.video_embeds_storage.get_db", return_value=db):
+            saved = save_video_embed("alpha", post_url, f'<iframe src="{embed_src}"></iframe>')
+        self.assertEqual(saved["embed_src"], embed_src)
+        self.assertEqual(len(db["activity_video_embeds"].rows), 1)
+        self.assertEqual(db["profile_analysis_history"].rows[0]["activities"][0]["id"], "a1")
+
     def test_content_library_combined_filters_search_dates_and_pagination(self):
         rows = [
             {"id": "a1", "type": "post", "action_type": "post", "date": "2026-11-01T09:30:00", "text": "Quarterly Alpha update", "post_url": "https://www.linkedin.com/feed/update/a1"},
@@ -288,6 +328,28 @@ class TestDashboardEndpoints(unittest.TestCase):
         self.assertEqual(payload["selected_profile"], {"id": "alpha", "name": "Alpha"})
         self.assertEqual(payload["items"][0]["id"], "alpha-video")
         self.assertEqual(payload["items"][0]["profile_slug"], "alpha")
+
+    def test_video_embed_endpoint_only_accepts_a_video_from_that_saved_profile(self):
+        db = fixture_db()
+        post_url = "https://www.linkedin.com/posts/alpha_example-activity-123"
+        embed_src = "https://www.linkedin.com/embed/feed/update/urn:li:share:123"
+        db["profile_analysis_history"].rows = [{
+            "slug": "alpha", "subject_name": "Alpha", "subject_url": "https://www.linkedin.com/in/alpha/",
+            "activities": [{"id": "video-123", "type": "video", "is_video": True, "date": "2026-11-20", "post_url": post_url}],
+        }]
+        with patch.object(analytics, "get_db", return_value=db), patch.object(
+            dashboard_routes, "save_video_embed", return_value={"embed_src": embed_src}
+        ) as save:
+            response = self.client.post("/api/dashboard/video-embeds", json={
+                "profile_slug": "alpha", "post_url": post_url, "embed_code": f'<iframe src="{embed_src}"></iframe>',
+            })
+            missing = self.client.post("/api/dashboard/video-embeds", json={
+                "profile_slug": "beta", "post_url": post_url, "embed_code": f'<iframe src="{embed_src}"></iframe>',
+            })
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.get_json()["saved"])
+        self.assertEqual(missing.status_code, 404)
+        save.assert_called_once()
 
 
 if __name__ == "__main__":

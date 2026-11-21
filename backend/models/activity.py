@@ -1,5 +1,6 @@
 from dataclasses import dataclass, asdict
 from typing import Optional
+from urllib.parse import urlparse
 
 
 @dataclass
@@ -18,7 +19,7 @@ class Activity:
     post_author: Optional[str] = None        # Author of the post (e.g. Profile Name or Original Author)
     post_url: Optional[str] = None           # Link to original post on LinkedIn
     media_url: Optional[str] = None          # Image or Video URL if available
-    video_url: Optional[str] = None          # Direct video stream or video post URL if available
+    video_url: Optional[str] = None          # Direct playable media URL only; never a LinkedIn post permalink
     video_thumbnail: Optional[str] = None    # Video poster/thumbnail image URL
     video_status: Optional[str] = None       # Video extraction/playback status (e.g. 'Video extracted', 'Video detected', 'No video')
     is_video: bool = False                   # True if activity involves a video (post, like, comment, share)
@@ -54,6 +55,13 @@ class Activity:
     comment_secondary_tone: Optional[str] = None
 
     def __post_init__(self):
+        if self.video_url:
+            try:
+                host = (urlparse(self.video_url).hostname or "").lower()
+                if host == "linkedin.com" or host.endswith(".linkedin.com"):
+                    self.video_url = None
+            except ValueError:
+                self.video_url = None
         if not self.actor:
             self.actor = self.subject_name
         if not self.original_post_author:

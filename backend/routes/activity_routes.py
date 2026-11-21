@@ -2,6 +2,7 @@ import json
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 from flask import Blueprint, g, jsonify, request, session
 from auth.token_store import get_access_token
 from services.activity_service import get_activities_for_subject
@@ -1217,6 +1218,17 @@ def add_activity():
     comment_text = (data.get("comment_text") or "").strip()
     reaction_type = (data.get("reaction_type") or ("Like" if act_type == "like" else "")).strip()
     is_own_post = bool(data.get("is_own_post", act_type in ("post", "video", "share")))
+    video_url = data.get("video_url") or None
+    if video_url:
+        try:
+            host = (urlparse(video_url).hostname or "").lower()
+            if host == "linkedin.com" or host.endswith(".linkedin.com"):
+                video_url = None
+        except ValueError:
+            video_url = None
+    video_status = data.get("video_status") or ("Video stream extracted" if video_url else ("Video detected" if act_type == "video" else "No video"))
+    if not video_url and str(video_status).strip().lower() == "video stream extracted":
+        video_status = "Video detected (Stream protected by LinkedIn, permalink available)"
 
     def safe_int(v):
         try:
@@ -1241,9 +1253,10 @@ def add_activity():
         "post_author": post_author,
         "post_url": post_url or None,
         "media_url": media_url or None,
-        "video_url": data.get("video_url") or None,
+        "video_url": video_url,
+        "video_mime_type": data.get("video_mime_type") or None,
         "video_thumbnail": data.get("video_thumbnail") or None,
-        "video_status": data.get("video_status") or ("Video stream extracted" if data.get("video_url") else ("Video detected" if act_type == "video" else "No video")),
+        "video_status": video_status,
         "comment_text": comment_text or None,
         "reaction_type": reaction_type or None,
         "is_own_post": is_own_post,

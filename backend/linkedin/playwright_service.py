@@ -12,7 +12,7 @@ import html
 import json
 import time
 import threading
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Tuple, List, Dict, Any, Optional
@@ -499,6 +499,33 @@ def _extract_video_info(html_chunk: str, post_url: Optional[str] = None) -> Tupl
             video_url = cand
             has_video = True
 
+    # Chromium can resolve a playable source at runtime without reflecting it
+    # into the serialized src attribute. The extraction page annotates only
+    # browser-provided direct media sources; never infer a stream from a post
+    # permalink or use blob/MSE URLs.
+    if not video_url:
+        runtime_src_m = re.search(r'data-analyzer-playback-src="([^"]+)"', html_chunk, re.IGNORECASE)
+        if runtime_src_m:
+            candidate = html.unescape(runtime_src_m.group(1)).strip()
+            runtime_type_m = re.search(r'data-analyzer-playback-type="([^"]+)"', html_chunk, re.IGNORECASE)
+            runtime_type = html.unescape(runtime_type_m.group(1)).split(";", 1)[0].strip().lower() if runtime_type_m else ""
+            try:
+                parsed_candidate = urlparse(candidate)
+                host = (parsed_candidate.hostname or "").lower()
+                suffix = os.path.splitext(parsed_candidate.path.lower())[1]
+                supported = {
+                    ".mp4": "video/mp4", ".m4v": "video/mp4",
+                    ".webm": "video/webm", ".ogg": "video/ogg", ".ogv": "video/ogg",
+                }
+                candidate_mime = runtime_type if runtime_type in set(supported.values()) else supported.get(suffix, "")
+                is_linkedin_page = host == "linkedin.com" or host.endswith(".linkedin.com")
+                if (parsed_candidate.scheme == "https" and not is_linkedin_page and candidate_mime
+                        and not candidate.lower().startswith(("blob:", "data:"))):
+                    video_url = candidate
+                    has_video = True
+            except (TypeError, ValueError):
+                pass
+
     # 2. LinkedIn JSON data-sources attribute (e.g. data-sources='[{"src":"https://...mp4"}]')
     if not video_url:
         ds_m = re.search(r'data-sources="([^"]+)"', html_chunk)
@@ -567,6 +594,17 @@ def _extract_video_info(html_chunk: str, post_url: Optional[str] = None) -> Tupl
     if video_url or video_thumbnail:
         has_video = True
 
+    # A LinkedIn post/video page is a permalink, never a media stream. Keep it
+    # only in post_url; the frontend must never receive it as video_url.
+    if video_url:
+        try:
+            parsed_video_url = urlparse(video_url)
+            video_host = (parsed_video_url.hostname or "").lower()
+            if video_host == "linkedin.com" or video_host.endswith(".linkedin.com"):
+                video_url = None
+        except ValueError:
+            video_url = None
+
     # Determine honest status
     if video_url and any(domain in video_url.lower() for domain in ("youtube.com", "youtu.be", "vimeo.com")):
         video_status = "External video embed"
@@ -580,6 +618,23 @@ def _extract_video_info(html_chunk: str, post_url: Optional[str] = None) -> Tupl
         video_status = "No video"
 
     return has_video, video_url, video_thumbnail, video_status
+
+
+def _infer_video_mime_type(video_url: Optional[str], html_chunk: str = "") -> Optional[str]:
+    if not video_url:
+        return None
+    runtime_type_m = re.search(r'data-analyzer-playback-type="([^"]+)"', html_chunk, re.IGNORECASE)
+    source_type_m = re.search(r'<(?:source|video)\b[^>]*\btype="([^"]+)"', html_chunk, re.IGNORECASE)
+    type_match = runtime_type_m or source_type_m
+    runtime_type = html.unescape(type_match.group(1)).split(";", 1)[0].strip().lower() if type_match else ""
+    supported = {"video/mp4", "video/webm", "video/ogg"}
+    if runtime_type in supported:
+        return runtime_type
+    suffix = os.path.splitext(urlparse(video_url).path.lower())[1]
+    return {
+        ".mp4": "video/mp4", ".m4v": "video/mp4",
+        ".webm": "video/webm", ".ogg": "video/ogg", ".ogv": "video/ogg",
+    }.get(suffix)
 
 
 def _extract_activities_from_public_html(
@@ -735,6 +790,7 @@ def _extract_activities_from_public_html(
                     "original_post_url": comment_post_url or profile_url,
                     "media_url": video_thumbnail or None,
                     "video_url": video_url,
+                    "video_mime_type": _infer_video_mime_type(video_url, chunk),
                     "video_thumbnail": video_thumbnail,
                     "video_status": video_status,
                     "is_video": is_video,
@@ -922,6 +978,7 @@ def _extract_activities_from_public_html(
                     "original_post_url": clean_post_url or profile_url,
                     "media_url": media_url,
                     "video_url": video_url,
+                    "video_mime_type": _infer_video_mime_type(video_url, combined_chunk),
                     "video_thumbnail": video_thumbnail,
                     "video_status": video_status,
                     "is_video": is_video,
@@ -1078,6 +1135,7 @@ def _extract_activities_from_public_html(
                 "original_post_url": clean_post_url or profile_url,
                 "media_url": media_url,
                 "video_url": video_url,
+                "video_mime_type": _infer_video_mime_type(video_url, card_html),
                 "video_thumbnail": video_thumbnail,
                 "video_status": video_status,
                 "is_video": is_video,
@@ -1537,6 +1595,30 @@ def scrape_linkedin_profile_activities(
 
                     # Safely retrieve page HTML content
                     try:
+                        # Read only a direct, browser-resolved HTTPS media URL
+                        # already exposed by a rendered <video>. Do not play,
+                        # fetch, unwrap blob URLs, inspect network traffic, or
+                        # infer media URLs from LinkedIn post permalinks.
+                        try:
+                            page.evaluate("""() => {
+                            const mimeByExt = { mp4: 'video/mp4', m4v: 'video/mp4', webm: 'video/webm', ogg: 'video/ogg', ogv: 'video/ogg' };
+                            for (const video of document.querySelectorAll('video')) {
+                                const source = video.currentSrc || video.querySelector('source')?.src || video.getAttribute('src') || '';
+                                if (!source || !source.startsWith('https://') || source.startsWith('blob:') || source.startsWith('data:')) continue;
+                                let parsed;
+                                try { parsed = new URL(source); } catch (_) { continue; }
+                                const host = parsed.hostname.toLowerCase();
+                                if (host === 'linkedin.com' || host.endsWith('.linkedin.com')) continue;
+                                const declared = (video.querySelector('source[type]')?.type || '').split(';')[0].trim().toLowerCase();
+                                const ext = (parsed.pathname.match(/\\.([a-z0-9]+)$/i) || [])[1]?.toLowerCase() || '';
+                                const mime = ['video/mp4', 'video/webm', 'video/ogg'].includes(declared) ? declared : (mimeByExt[ext] || '');
+                                if (!mime) continue;
+                                video.setAttribute('data-analyzer-playback-src', source);
+                                video.setAttribute('data-analyzer-playback-type', mime);
+                            }
+                            }""")
+                        except Exception as source_error:
+                            dbg(f"[DEBUG] Rendered media source inspection skipped: {source_error}")
                         page_html = page.content()
                     except Exception as ce:
                         dbg(f"[DEBUG] Page content fetch error: {ce}")

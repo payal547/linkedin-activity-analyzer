@@ -265,6 +265,7 @@ def analyze_activities(
             # Video Attributes
             "is_video": is_vid,
             "video_url": v_url,
+            "video_mime_type": row.get("video_mime_type") or None,
             "video_thumbnail": v_thumb,
             "video_status": v_stat
         })

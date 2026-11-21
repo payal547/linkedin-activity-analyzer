@@ -130,6 +130,27 @@ class TestVideoExtraction(unittest.TestCase):
         self.assertEqual(v_thumb, "https://media.licdn.com/thumb.jpg")
         self.assertEqual(v_status, "Video detected (Stream protected by LinkedIn, permalink available)")
 
+    def test_browser_resolved_direct_source_is_preserved(self):
+        html_chunk = (
+            '<div class="feedshare-video"><video '
+            'data-analyzer-playback-src="https://dms.licdn.com/playlist/resolved.mp4?signature=opaque" '
+            'data-analyzer-playback-type="video/mp4" '
+            'poster="https://media.licdn.com/poster.jpg"></video></div>'
+        )
+        has_v, v_url, v_thumb, v_status = _extract_video_info(html_chunk)
+        self.assertTrue(has_v)
+        self.assertEqual(v_url, "https://dms.licdn.com/playlist/resolved.mp4?signature=opaque")
+        self.assertEqual(v_thumb, "https://media.licdn.com/poster.jpg")
+        self.assertEqual(v_status, "Video stream extracted")
+
+    def test_linkedin_permalink_is_never_a_video_stream(self):
+        html_chunk = '<div class="feedshare-video"><video src="https://www.linkedin.com/posts/member_activity-123"></video><img class="video-thumbnail" src="https://media.licdn.com/poster.jpg"></div>'
+        has_v, v_url, v_thumb, v_status = _extract_video_info(html_chunk)
+        self.assertTrue(has_v)
+        self.assertIsNone(v_url)
+        self.assertEqual(v_thumb, "https://media.licdn.com/poster.jpg")
+        self.assertEqual(v_status, "Video detected (Stream protected by LinkedIn, permalink available)")
+
     def test_non_video_post(self):
         """Simulate standard image or text post with no video elements."""
         html_chunk = (
@@ -180,6 +201,17 @@ class TestActivityDataclassVideoFields(unittest.TestCase):
             type="video",
             text="Demo video without explicit status"
         )
+        self.assertEqual(act.video_status, "Video detected (LinkedIn auth required for playback)")
+
+    def test_activity_model_does_not_accept_linkedin_permalink_as_stream(self):
+        act = Activity(
+            id="act_video_permalink",
+            date="2026-11-03",
+            type="video",
+            video_url="https://www.linkedin.com/posts/member_activity-123",
+            post_url="https://www.linkedin.com/posts/member_activity-123",
+        )
+        self.assertIsNone(act.video_url)
         self.assertEqual(act.video_status, "Video detected (LinkedIn auth required for playback)")
 
 

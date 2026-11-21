@@ -34,6 +34,22 @@ class TestActivities(unittest.TestCase):
         data = response.get_json()
         self.assertEqual(data.get("subject_name"), "Test")
 
+    def test_activity_add_rejects_linkedin_page_url_as_video_stream(self):
+        response = self.client.post("/api/activities/add", json={
+            "subject_name": "Video URL validation test",
+            "subject_id": "video-url-validation-test",
+            "type": "video",
+            "post_url": "https://www.linkedin.com/posts/member_activity-123",
+            "video_url": "https://www.linkedin.com/posts/member_activity-123",
+            "video_status": "Video stream extracted",
+            "video_thumbnail": "https://media.licdn.com/poster.jpg",
+        })
+        self.assertEqual(response.status_code, 200)
+        item = response.get_json()["item"]
+        self.assertIsNone(item["video_url"])
+        self.assertEqual(item["post_url"], "https://www.linkedin.com/posts/member_activity-123")
+        self.assertNotEqual(item["video_status"], "Video stream extracted")
+
     def test_analyze_primary_json_workflow(self):
         with self.client.session_transaction() as sess:
             sess["linkedin_profile"] = {"name": "Payal Pal", "email": "payal@example.com"}

@@ -37,6 +37,13 @@
     .library-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
     .library-actions a { color: #1769ce; font-size: 12px; font-weight: 700; text-decoration: none; }
     .library-actions a:hover { text-decoration: underline; }
+    .library-embed-editor { margin-top: 12px; padding: 10px 12px; border: 1px solid #dce6f1; border-radius: 10px; background: #f8fbff; }
+    .library-embed-editor summary { color: #315779; font-size: 12px; font-weight: 750; cursor: pointer; }
+    .library-embed-editor p, .library-embed-form label { color: #65758b; font-size: 11px; line-height: 1.5; }
+    .library-embed-form label { display: grid; gap: 6px; }
+    .library-embed-form textarea { width: 100%; resize: vertical; border: 1px solid #d7e1ed; border-radius: 8px; padding: 9px; color: #263a53; font: 12px ui-monospace, monospace; }
+    .library-embed-actions { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+    .library-embed-status { color: #64748b; font-size: 11px; }
     .library-note { margin: 14px 0 0; }
     @media (max-width: 1020px) { .library-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
     @media (max-width: 620px) { .library-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .library-filters label:first-child { grid-column: 1 / -1; } }
@@ -82,7 +89,7 @@
       </div>
       <div id="contentGrid" class="content-grid" aria-live="polite"><p class="empty">Loading stored content…</p></div>
       <div class="pager"><span id="pageLabel"></span><button id="previousPage" class="button button-light" type="button">Previous</button><button id="nextPage" class="button button-light" type="button">Next</button></div>
-      <p class="muted library-note">Photos and videos filter by attached media; posts, likes, comments, and shares filter by action. A photo or video can also be part of a like or share, so those tabs can overlap. Only records currently stored in MongoDB are shown. Inline playback needs an accessible supported media URL or an eligible official LinkedIn embed; the original post link remains available as a fallback.</p>
+      <p class="muted library-note">Photos and videos filter by attached media; posts, likes, comments, and shares filter by action. A photo or video can also be part of a like or share, so those tabs can overlap. For public posts, add LinkedIn’s official embed code on a video card to try inline playback. Protected posts may remain available only on LinkedIn.</p>
     </section>
     <footer>Content shown here comes from stored analysis records. This page does not start a new LinkedIn extraction.</footer>
   </main>

@@ -6,8 +6,9 @@
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[char]));
 
   function safeUrl(value) {
+    if (typeof value !== "string" || !value.trim()) return "";
     try {
-      const url = new URL(value, window.location.origin);
+      const url = new URL(value.trim(), window.location.origin);
       return ["http:", "https:"].includes(url.protocol) ? url.href : "";
     } catch (_) { return ""; }
   }
@@ -137,7 +138,7 @@
   function videoUnavailableMessage(row, hasBadStream = false) {
     if (hasBadStream) return "Playback failed. The media may be expired, protected, or unsupported by this browser.";
     const status = String(row.video_status || "").toLowerCase();
-    if (/auth|protect|login|restricted/.test(status)) return "LinkedIn requires authenticated access to play this video. This app will not bypass that restriction.";
+    if (/auth|protect|login|restricted/.test(status)) return "LinkedIn did not provide a playable stream for this post. This is only a preview; open the original post on LinkedIn to view it if your account has access.";
     if ((row.video_stream_url || row.video_url) && !directVideoSource(row.video_stream_url || row.video_url, row.video_mime_type)) return "No directly playable media URL was stored. A LinkedIn post or video page cannot be used as a video stream.";
     if (row.video_thumbnail || row.media_url) return "The video was detected, but an accessible video stream was not extracted.";
     return "No accessible video stream or thumbnail is available for this activity.";
@@ -180,6 +181,11 @@
     return `<span class="library-identity">${avatar}<span class="library-profile-name">${escapeHtml(name)}</span></span>`;
   }
 
+  function videoEmbedEditor(row, originalUrl) {
+    if (!row.is_video || row.embed_src || !originalUrl || !row.profile_slug) return "";
+    return `<details class="library-embed-editor"><summary>Add official LinkedIn embed</summary><p>For a public post, copy LinkedIn’s “Embed this post” code and paste it here. Protected posts may not be embeddable.</p><form class="library-embed-form" data-profile="${escapeHtml(row.profile_slug)}" data-post="${escapeHtml(originalUrl)}"><label>LinkedIn embed code<textarea required maxlength="12000" rows="3" placeholder="Paste the official iframe code"></textarea></label><div class="library-embed-actions"><button class="button button-light" type="submit">Save embed</button><span class="library-embed-status" role="status"></span></div></form></details>`;
+  }
+
   function engagement(row) {
     return [
       ["Likes", row.likes], ["Comments", row.comments], ["Shares", row.shares],
@@ -204,7 +210,7 @@
     const engagementHtml = engagement(row);
     const badges = `<span class="content-badge">${escapeHtml(eventLabel(kind))}</span>${mediaType ? `<span class="content-badge content-badge-media">${mediaType}</span>` : ""}`;
 
-    return `<article class="content-card library-card">${renderMedia(row)}<div class="content-card-body"><div class="content-meta">${profileIdentity(row)}<span class="content-date">${escapeHtml(formatDate(row.date))}</span></div><div class="library-badges">${badges}</div><h3>${escapeHtml(author)}</h3><p class="content-text">${escapeHtml(eventText || "No event text was stored for this activity.")}</p>${showOriginalContext ? `<div class="library-original-post"><strong>Original post</strong><p>${escapeHtml(originalText)}</p></div>` : ""}${engagementHtml ? `<div class="library-engagement">${engagementHtml}</div>` : ""}${originalUrl ? `<div class="library-actions"><a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Open Original Post on LinkedIn ↗</a></div>` : ""}</div></article>`;
+    return `<article class="content-card library-card">${renderMedia(row)}<div class="content-card-body"><div class="content-meta">${profileIdentity(row)}<span class="content-date">${escapeHtml(formatDate(row.date))}</span></div><div class="library-badges">${badges}</div><h3>${escapeHtml(author)}</h3><p class="content-text">${escapeHtml(eventText || "No event text was stored for this activity.")}</p>${showOriginalContext ? `<div class="library-original-post"><strong>Original post</strong><p>${escapeHtml(originalText)}</p></div>` : ""}${engagementHtml ? `<div class="library-engagement">${engagementHtml}</div>` : ""}${videoEmbedEditor(row, originalUrl)}${originalUrl ? `<div class="library-actions"><a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Open Original Post on LinkedIn ↗</a></div>` : ""}</div></article>`;
   }
 
   function emptyMessage(result) {
@@ -256,6 +262,33 @@
         const wrapper = image.closest(".content-media");
         if (wrapper) wrapper.innerHTML = `<div class="library-media-error">The image is currently unavailable or its URL has expired.</div>`;
       }, { once: true });
+    });
+    document.querySelectorAll(".library-preview-image").forEach((image) => {
+      image.addEventListener("error", () => image.remove(), { once: true });
+    });
+    document.querySelectorAll(".library-embed-form").forEach((form) => {
+      form.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = form.querySelector('button[type="submit"]');
+        const status = form.querySelector(".library-embed-status");
+        const input = form.querySelector("textarea");
+        button.disabled = true;
+        status.textContent = "Validating embed…";
+        try {
+          const response = await fetch("/api/dashboard/video-embeds", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", Accept: "application/json" },
+            body: JSON.stringify({ profile_slug: form.dataset.profile, post_url: form.dataset.post, embed_code: input.value }),
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(result.error || `Save failed (${response.status})`);
+          await loadContent();
+          setStatus("Official LinkedIn embed saved for this profile and post.");
+        } catch (error) {
+          status.textContent = error.message || "Could not save this embed.";
+          button.disabled = false;
+        }
+      });
     });
   }
 

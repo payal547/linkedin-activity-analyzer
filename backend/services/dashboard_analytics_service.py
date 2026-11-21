@@ -7,6 +7,7 @@ from datetime import date, datetime
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from db.mongo import get_db, sanitize_doc
+from services.video_embeds_storage import canonical_linkedin_post_url, load_video_embed_map
 
 
 def _slug(value: Any) -> str:
@@ -384,6 +385,7 @@ def get_profile(slug: str) -> Optional[Dict[str, Any]]:
 def list_content(profile_slug: str = "", kind: str = "", search: str = "", start_date: str = "", end_date: str = "", sort: str = "newest", page: int = 1, per_page: int = 20) -> Dict[str, Any]:
     profiles, histories, _runs, activities, imports = _records()
     rows = _collect_content(histories, activities, imports)
+    embed_map = load_video_embed_map(get_db()["activity_video_embeds"])
     slug = _slug(profile_slug)
     normalized_kind = kind.strip().lower()
     if normalized_kind in ("photos", "image", "images", "picture"):
@@ -441,6 +443,12 @@ def list_content(profile_slug: str = "", kind: str = "", search: str = "", start
         row["activity_kind"] = event_kind
         row["is_video"] = is_video
         row["is_photo"] = is_photo
+        if is_video and not row.get("embed_src"):
+            post_url = row.get("linkedin_post_url") or row.get("original_post_url") or row.get("post_url")
+            try:
+                row["embed_src"] = embed_map.get((row_slug, canonical_linkedin_post_url(post_url)))
+            except ValueError:
+                row["embed_src"] = None
         search_fields = (
             "text", "activity_text", "post_content", "original_post_text", "comment_text",
             "post_author", "original_post_author", "subject_name", "actor", "reaction_type",
