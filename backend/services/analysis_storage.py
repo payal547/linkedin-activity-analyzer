@@ -340,15 +340,21 @@ def save_latest_analysis(analysis_data: Dict[str, Any]) -> None:
     activities = analysis_data.get("activities", [])
     has_success_activities = (total_acts > 0) or (isinstance(activities, list) and len(activities) > 0)
 
-    def _filter_historical_if_needed(hist_dict: Dict[str, Any]) -> Dict[str, Any]:
-        req_kinds = analysis_data.get("filtered_activity_types") or ["all"]
-        if req_kinds != ["all"] and hist_dict and hist_dict.get("activities"):
+    def _filter_historical_if_needed(hist_dict: Dict[str, Any], profile_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        request_data = profile_data or analysis_data
+        req_kinds = request_data.get("filtered_activity_types") or analysis_data.get("filtered_activity_types") or ["all"]
+        requested_range = request_data.get("requested_date_range") or request_data.get("date_range") or {}
+        req_start = requested_range.get("start")
+        req_end = requested_range.get("end")
+        if (req_kinds != ["all"] or req_start or req_end) and hist_dict and hist_dict.get("activities"):
             try:
                 from services.analysis_service import analyze_activities
                 raw_h = hist_dict.get("activities", [])
                 f_hist = analyze_activities(
                     rows=raw_h,
                     activity_types=req_kinds,
+                    start_date=req_start,
+                    end_date=req_end,
                     subject_name=hist_dict.get("subject_name", "LinkedIn Profile"),
                     data_source=hist_dict.get("data_source", "real_linkedin"),
                     subject_url=hist_dict.get("subject_url"),
@@ -376,7 +382,7 @@ def save_latest_analysis(analysis_data: Dict[str, Any]) -> None:
                 if pr_slug:
                     hist = load_profile_successful_analysis(pr_slug)
                     if hist:
-                        hist = _filter_historical_if_needed(hist)
+                        hist = _filter_historical_if_needed(hist, pr)
                         pr["historical_successful_analysis"] = hist
                         if "historical_successful_analysis" not in analysis_data:
                             analysis_data["historical_successful_analysis"] = hist

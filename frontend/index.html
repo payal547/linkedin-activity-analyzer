@@ -426,6 +426,41 @@
             gap: 12px;
         }
 
+        .saved-profiles-pagination {
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            margin: 14px 0 18px;
+            padding: 10px 12px;
+            border: 1px solid #dbe4ef;
+            border-radius: 12px;
+            background: #fff;
+        }
+
+        .saved-profiles-pagination button {
+            min-width: 92px;
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 9px;
+            background: #fff;
+            color: #1e3a5f;
+            font-weight: 650;
+            cursor: pointer;
+        }
+
+        .saved-profiles-pagination button:disabled {
+            opacity: .45;
+            cursor: not-allowed;
+        }
+
+        #savedProfilesPageLabel {
+            color: #475569;
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+        }
+
         /* YouTube-Style Live Top Progress Bar */
         .yt-progress-bar {
             position: fixed;
@@ -918,9 +953,215 @@
             border-color: #fca5a5;
         }
     </style>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/site-theme.css">
+    <script>
+        if (window.location.pathname === "/saved-profiles") {
+            document.documentElement.classList.add("saved-profiles-route");
+            document.title = "Saved Profiles | LinkedIn Activity Analyzer";
+        }
+    </script>
+    <style>
+        html.saved-profiles-route .main-wrapper {
+            align-items: flex-start;
+            min-height: calc(100vh - 72px);
+            padding: 12px clamp(12px, 2vw, 28px) 24px;
+        }
+        html.saved-profiles-route .container {
+            width: min(100%, 1440px);
+            max-width: 1440px;
+            grid-template-columns: minmax(0, 1fr);
+            row-gap: 0;
+            padding: 18px;
+            border-radius: 18px;
+        }
+        html.saved-profiles-route .logo-badge,
+        html.saved-profiles-route .landing-eyebrow,
+        html.saved-profiles-route .container > h2,
+        html.saved-profiles-route .container > .subtitle,
+        html.saved-profiles-route #authAccountCard,
+        html.saved-profiles-route .landing-insight-card,
+        html.saved-profiles-route #targetProfileSection,
+        html.saved-profiles-route .secondary-actions,
+        html.saved-profiles-route .privacy-note {
+            display: none !important;
+        }
+        html.saved-profiles-route #savedProfilesSection {
+            grid-column: 1;
+            grid-row: auto;
+            margin-top: 0;
+            padding: 14px;
+        }
+        html.saved-profiles-route .header {
+            position: sticky;
+            top: 0;
+        }
+        html.saved-profiles-route .section-separator {
+            margin: 0 0 8px;
+            font-size: 11px;
+        }
+        html.saved-profiles-route .saved-profiles-header {
+            margin-bottom: 10px;
+        }
+        html.saved-profiles-route .saved-profiles-batch-actions {
+            min-height: 42px;
+            margin-bottom: 8px;
+            padding: 6px 10px;
+        }
+        html.saved-profiles-route .saved-profiles-selection-status {
+            margin: 0 0 0 auto;
+        }
+        html.saved-profiles-route .saved-profiles-common-dates {
+            display: grid;
+            grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.8fr);
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 9px;
+            padding: 10px 12px;
+        }
+        html.saved-profiles-route .common-dates-header {
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 2px;
+            margin: 0;
+        }
+        html.saved-profiles-route .common-dates-fields {
+            gap: 8px;
+        }
+        html.saved-profiles-route .common-dates-fields .date-field {
+            display: grid;
+            grid-template-columns: auto minmax(110px, 1fr);
+            align-items: center;
+            gap: 8px;
+        }
+        html.saved-profiles-route .common-dates-fields .date-field label {
+            font-size: 10px;
+            white-space: nowrap;
+        }
+        html.saved-profiles-route .common-date-text-input {
+            min-height: 36px;
+        }
+        html.saved-profiles-route .saved-profiles-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 10px;
+        }
+        html.saved-profiles-route .saved-profile-card {
+            gap: 8px;
+            padding: 11px;
+        }
+        html.saved-profiles-route .saved-profile-top {
+            margin: 0;
+            padding-bottom: 7px;
+        }
+        html.saved-profiles-route .saved-profile-body {
+            gap: 9px;
+        }
+        html.saved-profiles-route :is(.saved-profile-avatar, .saved-profile-avatar-fallback) {
+            width: 42px;
+            height: 42px;
+        }
+        html.saved-profiles-route .saved-profile-name {
+            font-size: 14px;
+        }
+        html.saved-profiles-route .saved-profile-dates {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 7px;
+            padding: 8px;
+        }
+        html.saved-profiles-route .saved-profile-date-heading {
+            min-height: 30px;
+        }
+        html.saved-profiles-route .saved-profile-date-preset {
+            min-height: 30px;
+            padding: 4px 6px;
+        }
+        html.saved-profiles-route .saved-profile-dates .common-date-text-input {
+            min-height: 34px;
+            padding-top: 6px;
+            padding-bottom: 6px;
+        }
+        html.saved-profiles-route .saved-profile-actions {
+            padding-top: 7px;
+        }
+        html.saved-profiles-route .saved-profiles-pagination {
+            margin: 9px 0 0;
+            padding: 7px 9px;
+        }
+        html.saved-profiles-route .saved-profiles-footer-actions {
+            position: sticky;
+            bottom: 8px;
+            z-index: 5;
+            margin-top: 10px;
+            padding: 8px;
+            border: 1px solid #dce8f4;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.95);
+            box-shadow: 0 6px 22px rgba(22, 45, 78, 0.12);
+            backdrop-filter: blur(10px);
+        }
+        html.saved-profiles-route .saved-profiles-footer-actions .btn-analyze-selected {
+            min-height: 42px;
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        @media (max-width: 1100px) {
+            html.saved-profiles-route .saved-profiles-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+        @media (max-width: 760px) {
+            html.saved-profiles-route .container { padding: 10px; }
+            html.saved-profiles-route #savedProfilesSection { padding: 10px; }
+            html.saved-profiles-route .saved-profiles-common-dates {
+                grid-template-columns: 1fr;
+                gap: 8px;
+            }
+            html.saved-profiles-route .common-dates-header {
+                flex-direction: row;
+                justify-content: space-between;
+                align-items: center;
+            }
+            html.saved-profiles-route .common-dates-fields .date-field {
+                grid-template-columns: 1fr;
+                gap: 4px;
+            }
+        }
+        @media (max-width: 560px) {
+            html.saved-profiles-route .saved-profiles-grid {
+                grid-template-columns: 1fr;
+            }
+            html.saved-profiles-route .saved-profile-card {
+                display: grid;
+                grid-template-columns: minmax(0, 1fr) auto;
+                gap: 8px 10px;
+            }
+            html.saved-profiles-route .saved-profile-top,
+            html.saved-profiles-route .saved-profile-body,
+            html.saved-profiles-route .saved-profile-dates,
+            html.saved-profiles-route .saved-profile-actions {
+                grid-column: 1 / -1;
+            }
+            html.saved-profiles-route .saved-profile-dates {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+            html.saved-profiles-route .saved-profile-date-heading {
+                align-items: center;
+                flex-direction: row;
+            }
+            html.saved-profiles-route .saved-profile-date-preset {
+                max-width: 145px;
+            }
+            html.saved-profiles-route .saved-profiles-header {
+                align-items: center;
+            }
+        }
+        html:not(.saved-profiles-route) #savedProfilesSection {
+            display: none !important;
+        }
+    </style>
 </head>
 
-<body>
+<body class="app-page landing-page">
 
     <!-- YouTube-Style Live Top Progress Bar -->
     <div id="ytAnalysisProgressBar" class="yt-progress-bar" style="display: none;"></div>
@@ -933,16 +1174,21 @@
     <header class="header">
         <h1>LinkedIn Activity Analyzer</h1>
         <nav>
-            <a href="/connections">Imported Connections (Optional)</a>
+            <a href="/">Analyzer</a>
+            <a href="/saved-profiles">Saved Profiles</a>
+            <a href="/analytics">Analytics</a>
+            <a href="/content-library">Content Library</a>
+            <a href="/connections">Connections</a>
         </nav>
     </header>
 
     <div class="main-wrapper">
         <div class="container">
             <span class="logo-badge">in</span>
+            <span class="landing-eyebrow">PROFILE INTELLIGENCE, MADE CLEAR</span>
             <h2>LinkedIn Activity Analyzer</h2>
             <p class="subtitle">
-                Inspect public LinkedIn profile activities, posts, reactions, comments, and engagement.
+                Follow public posts, comments, reactions, and shares across the profile timeline you choose.
             </p>
 
             <!-- Authenticated Testing Account Status Card -->
@@ -980,6 +1226,26 @@
                     <p class="auth-disconnected-desc">Please check the saved testing session.</p>
                 </div>
             </div>
+
+            <aside class="landing-insight-card" aria-label="Analyzer overview">
+                <div class="insight-card-topline">
+                    <span class="insight-signal-dot"></span>
+                    <span>ACTIVITY AT A GLANCE</span>
+                    <span class="insight-live-label">TIMELINE</span>
+                </div>
+                <div class="insight-visual" aria-hidden="true">
+                    <span class="insight-line"></span>
+                    <i style="--bar-height: 34%"></i><i style="--bar-height: 54%"></i>
+                    <i style="--bar-height: 43%"></i><i style="--bar-height: 76%"></i>
+                    <i style="--bar-height: 61%"></i><i style="--bar-height: 92%"></i>
+                    <i style="--bar-height: 70%"></i><i style="--bar-height: 100%"></i>
+                    <i style="--bar-height: 82%"></i><i style="--bar-height: 58%"></i>
+                    <span class="insight-visual-caption">A clearer view of public activity over time</span>
+                </div>
+                <h3>Find the signal in the timeline.</h3>
+                <p>Choose a profile, set the dates that matter, and review posts and engagement in one focused workspace.</p>
+                <div class="insight-tags"><span>Posts</span><span>Reactions</span><span>Comments</span><span>Shares</span></div>
+            </aside>
 
             <!-- Target Profile Input Section -->
             <div id="targetProfileSection">
@@ -1044,6 +1310,9 @@
                             <span>Select All</span>
                         </label>
                     </div>
+                    <div class="saved-profiles-selection-status">
+                        <span id="selectedProfilesCountText" class="selected-count-badge">Selected: 0 profiles</span>
+                    </div>
                 </div>
 
                 <!-- Common Date Range Selector (Directly below Select All and before profile cards) -->
@@ -1072,17 +1341,18 @@
                     </div>
                 </div>
 
-                <!-- Selected Profiles Status (Directly below Date Range and BEFORE profile list) -->
-                <div class="saved-profiles-selection-status">
-                    <span id="selectedProfilesCountText" class="selected-count-badge">Selected: 0 profiles</span>
-                </div>
-
                 <div id="savedProfilesMsg" class="error-message" style="margin-bottom: 12px; display: none;"></div>
 
                 <!-- Individual profile date ranges are set on each saved profile card. -->
                 <div id="savedProfilesContainer" class="saved-profiles-grid">
                     <!-- Dynamically rendered -->
                 </div>
+
+                <nav id="savedProfilesPagination" class="saved-profiles-pagination" aria-label="Saved profiles pages">
+                    <button type="button" id="savedProfilesPrevPage" onclick="changeSavedProfilesPage(-1)">Previous</button>
+                    <span id="savedProfilesPageLabel"></span>
+                    <button type="button" id="savedProfilesNextPage" onclick="changeSavedProfilesPage(1)">Next</button>
+                </nav>
 
                 <!-- Multi-Profile Analysis Progress Feedback (Phase 3 - Issue 7) -->
                 <div id="multiProfileProgressCard" style="display: none; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
@@ -1123,9 +1393,22 @@
     <script>
         // Automatic background session verification on startup
         document.addEventListener("DOMContentLoaded", () => {
-            initTestingSession();
-            loadSavedProfilesUI();
+            if (window.location.pathname === "/saved-profiles") {
+                loadSavedProfilesUI();
+            } else {
+                initTestingSession();
+            }
         });
+
+        async function readApiJson(response, endpointLabel) {
+            const contentType = response.headers.get("content-type") || "";
+            if (!contentType.toLowerCase().includes("application/json")) {
+                const responseText = await response.text();
+                const preview = responseText.replace(/\s+/g, " ").slice(0, 100);
+                throw new Error(`${endpointLabel} returned a non-JSON response (HTTP ${response.status}). ${preview}`);
+            }
+            return response.json();
+        }
 
         async function initTestingSession() {
             const loadingEl = document.getElementById("authLoadingState");
@@ -1138,7 +1421,7 @@
 
             try {
                 const response = await fetch("/api/auth/session-status", { credentials: "same-origin" });
-                const data = await response.json();
+                const data = await readApiJson(response, "Session status");
 
                 if (response.ok && data.connected) {
                     // Confirmed authenticated testing account
@@ -1207,7 +1490,7 @@
                     body: JSON.stringify({ url: rawUrl })
                 });
 
-                const data = await response.json();
+                const data = await readApiJson(response, "Profile validation");
 
                 if (!response.ok || !data.valid) {
                     throw new Error(data.error || "Please enter a valid LinkedIn profile URL (e.g. https://www.linkedin.com/in/username/)");
@@ -1342,7 +1625,7 @@
                     const endpoint = targetRunId ? `/api/pipeline/${encodeURIComponent(targetRunId)}` : "/api/pipeline/latest";
                     const res = await fetch(endpoint);
                     if (!res.ok) return;
-                    const data = await res.json();
+                    const data = await readApiJson(res, "Analysis progress");
                     if (!data || data.status === "no_runs") return;
 
                     const pct = Math.min(95, Math.max(4, Number(data.progress_percentage) || 4));
@@ -1466,6 +1749,40 @@
             }, 4000);
         }
 
+        const SAVED_PROFILES_PAGE_SIZE = 6;
+        let savedProfilesCurrentPage = 1;
+
+        function renderSavedProfilesPage(page = savedProfilesCurrentPage) {
+            const container = document.getElementById("savedProfilesContainer");
+            const pager = document.getElementById("savedProfilesPagination");
+            if (!container || !pager) return;
+
+            const cards = Array.from(container.querySelectorAll(":scope > .saved-profile-card"));
+            const totalPages = Math.max(1, Math.ceil(cards.length / SAVED_PROFILES_PAGE_SIZE));
+            savedProfilesCurrentPage = Math.min(totalPages, Math.max(1, Number(page) || 1));
+            const firstVisible = (savedProfilesCurrentPage - 1) * SAVED_PROFILES_PAGE_SIZE;
+
+            cards.forEach((card, index) => {
+                card.style.display = index >= firstVisible && index < firstVisible + SAVED_PROFILES_PAGE_SIZE ? "" : "none";
+            });
+
+            pager.style.display = totalPages > 1 ? "flex" : "none";
+            const label = document.getElementById("savedProfilesPageLabel");
+            const firstNumber = cards.length ? firstVisible + 1 : 0;
+            const lastNumber = Math.min(firstVisible + SAVED_PROFILES_PAGE_SIZE, cards.length);
+            if (label) label.textContent = `Page ${savedProfilesCurrentPage} of ${totalPages} | Profiles ${firstNumber}-${lastNumber} of ${cards.length}`;
+
+            const previous = document.getElementById("savedProfilesPrevPage");
+            const next = document.getElementById("savedProfilesNextPage");
+            if (previous) previous.disabled = savedProfilesCurrentPage <= 1;
+            if (next) next.disabled = savedProfilesCurrentPage >= totalPages;
+        }
+
+        function changeSavedProfilesPage(offset) {
+            renderSavedProfilesPage(savedProfilesCurrentPage + offset);
+            document.getElementById("savedProfilesSection")?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+
         async function loadSavedProfilesUI() {
             const section = document.getElementById("savedProfilesSection");
             const container = document.getElementById("savedProfilesContainer");
@@ -1473,17 +1790,23 @@
             if (!section || !container) return;
 
             try {
-                const res = await fetch("/api/profiles/saved");
-                if (!res.ok) return;
-                const data = await res.json();
+                const res = await fetch("/api/profiles/saved", {
+                    headers: { Accept: "application/json" },
+                    cache: "no-store"
+                });
+                const data = await readApiJson(res, "Saved Profiles");
+                if (!res.ok) throw new Error(data.error || `Could not load saved profiles (HTTP ${res.status}).`);
                 const profiles = data.profiles || [];
 
                 if (profiles.length === 0) {
                     section.style.display = "none";
+                    const pager = document.getElementById("savedProfilesPagination");
+                    if (pager) pager.style.display = "none";
                     return;
                 }
 
                 section.style.display = "block";
+                savedProfilesCurrentPage = 1;
                 if (countEl) countEl.textContent = `${profiles.length} saved`;
                 container.innerHTML = "";
 
@@ -1561,12 +1884,20 @@
                                 </select>
                             </div>
                             <div class="date-field">
-                                <label for="savedProfile${profileIndex}Start">From Date</label>
-                                <input type="date" id="savedProfile${profileIndex}Start" class="saved-profile-start-date" aria-label="From date for ${escapeAttr(p.name)}" value="${past30ISO}" onchange="markSavedProfileRangeCustom(this)">
+                                <label for="savedProfile${profileIndex}Start">From Date (DD/MM/YYYY)</label>
+                                <div class="common-date-input-wrap">
+                                    <input type="text" id="savedProfile${profileIndex}Start" class="common-date-text-input saved-profile-start-date" aria-label="From date for ${escapeAttr(p.name)}" placeholder="DD/MM/YYYY" maxlength="10" autocomplete="off" inputmode="numeric" value="${past30DMY}" oninput="markSavedProfileRangeCustom(this)">
+                                    <button type="button" class="common-cal-btn" onclick="triggerSavedProfileCalendar('savedProfile${profileIndex}Start')" aria-label="Open From Date calendar">📅</button>
+                                    <input type="date" id="savedProfile${profileIndex}Start_native" tabindex="-1" class="common-hidden-picker" onchange="onSavedProfileNativePicked('savedProfile${profileIndex}Start', this.value)">
+                                </div>
                             </div>
                             <div class="date-field">
-                                <label for="savedProfile${profileIndex}End">To Date</label>
-                                <input type="date" id="savedProfile${profileIndex}End" class="saved-profile-end-date" aria-label="To date for ${escapeAttr(p.name)}" value="${todayISO}" onchange="markSavedProfileRangeCustom(this)">
+                                <label for="savedProfile${profileIndex}End">To Date (DD/MM/YYYY)</label>
+                                <div class="common-date-input-wrap">
+                                    <input type="text" id="savedProfile${profileIndex}End" class="common-date-text-input saved-profile-end-date" aria-label="To date for ${escapeAttr(p.name)}" placeholder="DD/MM/YYYY" maxlength="10" autocomplete="off" inputmode="numeric" value="${todayDMY}" oninput="markSavedProfileRangeCustom(this)">
+                                    <button type="button" class="common-cal-btn" onclick="triggerSavedProfileCalendar('savedProfile${profileIndex}End')" aria-label="Open To Date calendar">📅</button>
+                                    <input type="date" id="savedProfile${profileIndex}End_native" tabindex="-1" class="common-hidden-picker" onchange="onSavedProfileNativePicked('savedProfile${profileIndex}End', this.value)">
+                                </div>
                             </div>
                         </div>
                         <div class="saved-profile-actions">
@@ -1592,9 +1923,16 @@
                     container.appendChild(card);
                 });
 
+                renderSavedProfilesPage(1);
                 updateSelectedProfilesCount();
             } catch (e) {
                 console.error("Failed to load saved profiles:", e);
+                if (section) section.style.display = "block";
+                const messageEl = document.getElementById("savedProfilesMsg");
+                if (messageEl) {
+                    messageEl.textContent = e.message || "Could not load saved profiles. Please refresh and try again.";
+                    messageEl.style.display = "block";
+                }
             }
         }
 
@@ -1695,8 +2033,15 @@
                     const name = card.querySelector(".saved-profile-name")?.textContent?.trim() || "";
                     const headline = card.querySelector(".saved-profile-headline")?.textContent?.trim() || "";
                     const avatar = card.querySelector(".saved-profile-avatar")?.getAttribute("src") || null;
-                    const profileStart = card.querySelector(".saved-profile-start-date")?.value || "";
-                    const profileEnd = card.querySelector(".saved-profile-end-date")?.value || "";
+                    const profileStartRaw = card.querySelector(".saved-profile-start-date")?.value?.trim() || "";
+                    const profileEndRaw = card.querySelector(".saved-profile-end-date")?.value?.trim() || "";
+                    const profileStart = profileStartRaw ? _toISO(_parseDMY(profileStartRaw)) : "";
+                    const profileEnd = profileEndRaw ? _toISO(_parseDMY(profileEndRaw)) : "";
+
+                    if ((profileStartRaw && !profileStart) || (profileEndRaw && !profileEnd)) {
+                        selectedRangeError = `Please enter valid dates in DD/MM/YYYY format for ${name || "this profile"}.`;
+                        return;
+                    }
 
                     if (profileStart && profileEnd && profileStart > profileEnd) {
                         selectedRangeError = `From Date must be on or before To Date for ${name || "this profile"}.`;
@@ -1783,17 +2128,21 @@
                         profiles: selectedList,
                         startDate: commonStart,
                         endDate: commonEnd,
-                        activities: ["all"]
+                        activities: ["all"],
+                        page: 1,
+                        per_page: 20
                     })
                 });
 
-                const data = await response.json();
+                const data = await readApiJson(response, "Batch analysis");
                 if (!response.ok) {
                     throw new Error(data.error || "Analysis of selected profiles failed.");
                 }
 
                 // Complete YouTube progress bar smoothly to 100%
                 completeYouTubeProgressBar();
+
+                localStorage.setItem("activityFilter", JSON.stringify({ batch: true, activities: ["all"] }));
 
                 // Update progress UI with complete status and per-profile results
                 if (progressCard) {
@@ -1904,7 +2253,7 @@
                     body: JSON.stringify({ url: profileUrl })
                 });
 
-                const data = await response.json();
+                const data = await readApiJson(response, "Profile validation");
                 if (!response.ok || !data.valid) {
                     throw new Error(data.error || "Failed to load saved profile");
                 }
@@ -1946,11 +2295,12 @@
                 if (response.ok) {
                     await loadSavedProfilesUI();
                 } else {
-                    const err = await response.json();
+                    const err = await readApiJson(response, "Profile removal");
                     alert(err.error || "Failed to remove saved profile.");
                 }
             } catch (e) {
                 console.error("Failed to remove profile:", e);
+                alert(e.message || "Failed to remove saved profile.");
             }
         }
 
@@ -1978,7 +2328,7 @@
             const mDmy = s.match(/^(\d{1,2})[\/\.-](\d{1,2})[\/\.-](\d{4})$/);
             if (mDmy) {
                 const d = new Date(parseInt(mDmy[3],10), parseInt(mDmy[2],10)-1, parseInt(mDmy[1],10));
-                if (!isNaN(d.getTime()) && d.getDate()===parseInt(mDmy[1],10)) return d;
+                if (!isNaN(d.getTime()) && d.getDate()===parseInt(mDmy[1],10) && d.getMonth()===parseInt(mDmy[2],10)-1 && d.getFullYear()===parseInt(mDmy[3],10)) return d;
             }
             const mIso = s.match(/^(\d{4})[\/\.-](\d{1,2})[\/\.-](\d{1,2})$/);
             if (mIso) {
@@ -2036,14 +2386,51 @@
             syncSavedProfileDateDefaults();
         }
 
+        function formatISODateToDMY(isoDate) {
+            if (!/^\d{4}-\d{2}-\d{2}$/.test(isoDate || "")) return "";
+            const [year, month, day] = isoDate.split("-");
+            return `${day}/${month}/${year}`;
+        }
+
+        function triggerSavedProfileCalendar(inputId) {
+            const textInput = document.getElementById(inputId);
+            const nativePicker = document.getElementById(inputId + "_native");
+            if (!nativePicker) return;
+            const parsed = _parseDMY(textInput?.value);
+            if (parsed) nativePicker.value = _toISO(parsed);
+            try {
+                if (typeof nativePicker.showPicker === "function") nativePicker.showPicker();
+                else { nativePicker.focus(); nativePicker.click(); }
+            } catch (e) {
+                nativePicker.focus(); nativePicker.click();
+            }
+        }
+
+        function onSavedProfileNativePicked(inputId, isoValue) {
+            if (!isoValue) return;
+            const textInput = document.getElementById(inputId);
+            if (textInput) {
+                textInput.value = formatISODateToDMY(isoValue);
+                markSavedProfileRangeCustom(textInput);
+            }
+        }
+
         function syncSavedProfileDateDefaults() {
             const start = _toISO(_parseDMY(document.getElementById("commonStartDate")?.value));
             const end = _toISO(_parseDMY(document.getElementById("commonEndDate")?.value));
             document.querySelectorAll(".saved-profile-card").forEach(card => {
                 const startInput = card.querySelector(".saved-profile-start-date");
                 const endInput = card.querySelector(".saved-profile-end-date");
-                if (startInput && (start || !document.getElementById("commonStartDate")?.value.trim())) startInput.value = start;
-                if (endInput && (end || !document.getElementById("commonEndDate")?.value.trim())) endInput.value = end;
+                if (startInput && (start || !document.getElementById("commonStartDate")?.value.trim())) {
+                    startInput.value = formatISODateToDMY(start);
+                    const native = document.getElementById(startInput.id + "_native");
+                    if (native) native.value = start;
+                }
+                if (endInput && (end || !document.getElementById("commonEndDate")?.value.trim())) {
+                    endInput.value = formatISODateToDMY(end);
+                    const native = document.getElementById(endInput.id + "_native");
+                    if (native) native.value = end;
+                }
                 const preset = card.querySelector(".saved-profile-date-preset");
                 if (preset) preset.value = "custom";
             });
@@ -2065,13 +2452,25 @@
             const toISO = d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
             const startInput = card.querySelector(".saved-profile-start-date");
             const endInput = card.querySelector(".saved-profile-end-date");
-            if (startInput) startInput.value = toISO(start);
-            if (endInput) endInput.value = toISO(end);
+            if (startInput) {
+                startInput.value = formatISODateToDMY(toISO(start));
+                const native = document.getElementById(startInput.id + "_native");
+                if (native) native.value = toISO(start);
+            }
+            if (endInput) {
+                endInput.value = formatISODateToDMY(toISO(end));
+                const native = document.getElementById(endInput.id + "_native");
+                if (native) native.value = toISO(end);
+            }
         }
 
         function markSavedProfileRangeCustom(input) {
-            const preset = input.closest(".saved-profile-card")?.querySelector(".saved-profile-date-preset");
+            const card = input.closest(".saved-profile-card");
+            const preset = card?.querySelector(".saved-profile-date-preset");
             if (preset) preset.value = "custom";
+            const parsed = _parseDMY(input.value);
+            const native = document.getElementById(input.id + "_native");
+            if (native && parsed) native.value = _toISO(parsed);
         }
 
         // Override handleAnalyzeSelectedProfiles to read DD/MM/YYYY and convert to ISO

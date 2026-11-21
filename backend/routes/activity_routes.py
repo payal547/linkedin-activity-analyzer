@@ -1,7 +1,8 @@
 import json
 import re
+from datetime import date, datetime, timezone
 from pathlib import Path
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, g, jsonify, request, session
 from auth.token_store import get_access_token
 from services.activity_service import get_activities_for_subject
 from services.analysis_service import analyze_activities
@@ -33,6 +34,214 @@ from utils.logger import (
 logger = get_logger(__name__)
 
 activity_bp = Blueprint("activity", __name__)
+
+
+@activity_bp.after_request
+def persist_analysis_run(response):
+    """Record one real analysis request after its response has been assembled."""
+    context = getattr(g, "analysis_run_context", None)
+    if not context:
+        return response
+    try:
+        payload = response.get_json(silent=True) or {}
+        analysis_result = context.get("analysis_result")
+        source = analysis_result if isinstance(analysis_result, dict) else payload
+        profile_rows = source.get("profile_results") if isinstance(source, dict) else None
+        identities = []
+        if isinstance(profile_rows, list):
+            identities = profile_rows
+        elif isinstance(source, dict) and (source.get("subject_url") or source.get("subject_id")):
+            identities = [source]
+        slugs = set(context.get("profile_slugs", []))
+        summaries = []
+        run_sources = {}
+        try:
+            from services.dashboard_analytics_service import _activity_type, _collect_content
+        except Exception:
+            _activity_type = None
+            _collect_content = None
+        for row in identities:
+            if not isinstance(row, dict):
+                continue
+            slug = extract_slug(row.get("subject_url") or row.get("subject_id"))
+            if slug == "self":
+                slug = ""
+            if slug:
+                slugs.add(slug)
+            rows = row.get("activities") if isinstance(row.get("activities"), list) else []
+            identity = slug or f"run-profile-{len(run_sources)}"
+            run_sources.setdefault(identity, {"slug": identity, "activities": []})["activities"].extend(rows)
+
+        unique_content = _collect_content(list(run_sources.values()), [], []) if _collect_content else []
+        for identity, run_source in run_sources.items():
+            unique_rows = _collect_content([run_source], [], []) if _collect_content else run_source["activities"]
+            type_counts = {}
+            for activity in unique_rows:
+                kind = _activity_type(activity) if _activity_type else str(activity.get("type") or "unknown").lower()
+                type_counts[kind] = type_counts.get(kind, 0) + 1
+            source_row = next((item for item in identities if isinstance(item, dict) and (extract_slug(item.get("subject_url") or item.get("subject_id")) or identity) == identity), {})
+            summaries.append({
+                "profile_slug": identity if not identity.startswith("run-profile-") else None,
+                "total_activities": len(unique_rows),
+                "posts_count": sum(1 for activity in unique_rows if _activity_type and _activity_type(activity) == "post" and not activity.get("is_video")),
+                "videos_count": sum(1 for activity in unique_rows if activity.get("is_video")),
+                "by_type": type_counts,
+                "retrieval_completeness": source_row.get("retrieval_completeness"),
+                "requested_date_range": source_row.get("requested_date_range"),
+                "requested_activity_types": source_row.get("filtered_activity_types") or context.get("requested_activity_types") or [],
+            })
+
+        total = len(unique_content) if analysis_result else (payload.get("total_activities") if isinstance(payload, dict) else None)
+        if total is None and summaries:
+            total = sum(int(row.get("total_activities") or 0) for row in summaries)
+        run_doc = {
+            "run_id": context["run_id"],
+            "started_at": context["started_at"],
+            "completed_at": datetime.now(timezone.utc).isoformat(),
+            "status": "completed" if response.status_code < 400 else "failed",
+            "http_status": response.status_code,
+            "profile_slugs": sorted(slugs),
+            "profile_count": len(slugs) or int(context.get("profile_count") or 0),
+            "profile_summaries": summaries,
+            "requested_date_range": context.get("requested_date_range"),
+            "requested_activity_types": context.get("requested_activity_types") or [],
+            "data_source": context.get("data_source"),
+            "total_activities": total,
+            "posts_count": sum(1 for activity in unique_content if _activity_type and _activity_type(activity) == "post" and not activity.get("is_video")) if analysis_result else (payload.get("posts_count") if isinstance(payload, dict) else None),
+            "videos_count": sum(1 for activity in unique_content if activity.get("is_video")) if analysis_result else (payload.get("videos_count") if isinstance(payload, dict) else None),
+            "by_type": {kind: sum(1 for activity in unique_content if (_activity_type(activity) if _activity_type else str(activity.get("type") or "unknown").lower()) == kind) for kind in {(_activity_type(activity) if _activity_type else str(activity.get("type") or "unknown").lower()) for activity in unique_content}} if analysis_result else (payload.get("by_type") if isinstance(payload, dict) and isinstance(payload.get("by_type"), dict) else {}),
+            "retrieval_completeness": source.get("retrieval_completeness") if isinstance(source, dict) else None,
+        }
+        from services.analysis_runs_storage import save_analysis_run
+        save_analysis_run(run_doc)
+    except Exception as exc:
+        logger.warning("Could not persist analysis run summary: %s", exc)
+    return response
+
+
+def _paginate_analysis_payload(payload, page, per_page):
+    """Return an analysis response with only the requested activity page(s)."""
+    if not per_page:
+        return payload
+
+    # Copy response containers only; activity rows are immutable during pagination.
+    result = dict(payload)
+    try:
+        page = max(1, int(page or 1))
+        per_page = min(100, max(1, int(per_page)))
+    except (TypeError, ValueError):
+        return payload
+
+    original_profiles = result.get("profile_results")
+    profile_results = [dict(profile) for profile in original_profiles] if isinstance(original_profiles, list) else original_profiles
+    if isinstance(profile_results, list):
+        result["profile_results"] = profile_results
+    is_multi = bool(result.get("is_multi_profile") or (isinstance(profile_results, list) and len(profile_results) > 1))
+
+    def source_activities(container):
+        activities = container.get("activities")
+        if isinstance(activities, list) and activities:
+            return activities, "activities"
+        historical = container.get("historical_successful_analysis") or {}
+        historical_activities = historical.get("activities")
+        if isinstance(historical_activities, list) and historical_activities:
+            return historical_activities, "historical"
+        return activities if isinstance(activities, list) else [], "activities"
+
+    def page_container(container, selected_page):
+        activities, source = source_activities(container)
+        total = len(activities)
+        if source == "historical":
+            historical = dict(container.get("historical_successful_analysis") or {})
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            start = (selected_page - 1) * per_page
+            historical["activities"] = activities[start:start + per_page]
+            historical["activity_pagination"] = {
+                "page": selected_page, "per_page": per_page,
+                "total_items": total, "total_pages": total_pages
+            }
+            container["historical_successful_analysis"] = historical
+            container["activities"] = []
+        else:
+            total_pages = max(1, (total + per_page - 1) // per_page)
+            start = (selected_page - 1) * per_page
+            container["activities"] = activities[start:start + per_page]
+        container["activity_pagination"] = {
+            "page": selected_page, "per_page": per_page,
+            "total_items": total, "total_pages": total_pages
+        }
+        historical = container.get("historical_successful_analysis") or {}
+        return container.get("activities", []) or historical.get("activities", [])
+
+    if is_multi and isinstance(profile_results, list):
+        activity_sets = [source_activities(profile) for profile in profile_results]
+        total_items = sum(len(activities) for activities, _source in activity_sets)
+        total_pages = max(1, (total_items + per_page - 1) // per_page)
+        page = min(page, total_pages)
+        page_start = (page - 1) * per_page
+        page_end = page_start + per_page
+        cursor = 0
+        displayed = []
+        for profile, (activities, source) in zip(profile_results, activity_sets):
+            local_start = max(0, page_start - cursor)
+            local_end = min(len(activities), page_end - cursor)
+            selected = activities[local_start:local_end] if local_end > local_start else []
+            if source == "historical":
+                historical = dict(profile.get("historical_successful_analysis") or {})
+                historical["activities"] = selected
+                historical["activity_pagination"] = {
+                    "page": page, "per_page": per_page,
+                    "total_items": len(activities), "total_pages": max(1, (len(activities) + per_page - 1) // per_page)
+                }
+                profile["historical_successful_analysis"] = historical
+                profile["activities"] = []
+            else:
+                profile["activities"] = selected
+            profile["activity_pagination"] = {
+                "page": page, "per_page": per_page,
+                "total_items": len(activities), "total_pages": max(1, (len(activities) + per_page - 1) // per_page)
+            }
+            displayed.extend(selected)
+            cursor += len(activities)
+        result["activities"] = displayed
+        # The dashboard reads historical activities from each profile row in a batch.
+        # A top-level history copy is redundant and could otherwise leak the full history.
+        if isinstance(result.get("historical_successful_analysis"), dict):
+            top_history = dict(result["historical_successful_analysis"])
+            top_history["activities"] = []
+            result["historical_successful_analysis"] = top_history
+    else:
+        activities, source = source_activities(result)
+        total_items = len(activities)
+        total_pages = max(1, (total_items + per_page - 1) // per_page)
+        page = min(page, total_pages)
+        page_container(result, page)
+        if isinstance(profile_results, list) and profile_results:
+            page_container(profile_results[0], page)
+            result["profile_results"] = profile_results
+
+    result["activity_pagination"] = {
+        "page": page, "per_page": per_page,
+        "total_items": total_items, "total_pages": total_pages
+    }
+    return result
+
+
+def _normalize_batch_date(value):
+    """Normalize common ISO/DD/MM/YYYY inputs before batch range comparison."""
+    if value is None or not str(value).strip():
+        return None, True
+    clean = str(value).strip()
+    iso_match = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})", clean)
+    dmy_match = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})", clean)
+    try:
+        if iso_match:
+            return date(int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3))).isoformat(), True
+        if dmy_match:
+            return date(int(dmy_match.group(3)), int(dmy_match.group(2)), int(dmy_match.group(1))).isoformat(), True
+    except ValueError:
+        return None, False
+    return None, False
 
 
 def resolve_linkedin_url(url: str):
@@ -246,6 +455,33 @@ def analyze():
     req_run_id = request.headers.get("X-Run-ID") or request.args.get("run_id")
     run_id = req_run_id or generate_run_id("run")
     set_current_run_id(run_id)
+    initial_data = request.get_json(silent=True)
+    if not isinstance(initial_data, dict):
+        initial_data = request.form.to_dict(flat=True)
+        form_activities = request.form.getlist("activities")
+        if form_activities:
+            initial_data["activities"] = form_activities
+    initial_profiles = initial_data.get("profiles") if isinstance(initial_data, dict) else None
+    initial_profile_rows = initial_profiles if isinstance(initial_profiles, list) else [initial_data] if isinstance(initial_data, dict) else []
+    initial_slugs = {
+        extract_slug(row.get("subject_url") or row.get("profile_url") or row.get("subject_id"))
+        for row in initial_profile_rows if isinstance(row, dict)
+    }
+    initial_slugs.discard(None)
+    initial_slugs.discard("")
+    initial_slugs.discard("self")
+    g.analysis_run_context = {
+        "run_id": run_id,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "profile_slugs": sorted(initial_slugs),
+        "profile_count": len(initial_profiles) if isinstance(initial_profiles, list) else (1 if initial_data else 0),
+        "requested_date_range": {
+            "start": initial_data.get("startDate") if isinstance(initial_data, dict) else request.form.get("startDate"),
+            "end": initial_data.get("endDate") if isinstance(initial_data, dict) else request.form.get("endDate"),
+        },
+        "requested_activity_types": initial_data.get("activities", []) if isinstance(initial_data, dict) else request.form.getlist("activities"),
+        "data_source": initial_data.get("data_source", "real_linkedin") if isinstance(initial_data, dict) else request.form.get("data_source", "imported" if request.files.get("file") else "real_linkedin"),
+    }
 
     # Check if this request is a secondary/optional file upload (CSV or ZIP)
     upload = request.files.get("file")
@@ -310,6 +546,7 @@ def analyze():
                 subject_url=subject_url,
                 retrieval_completeness="COMPLETE"
             )
+            result["requested_date_range"] = {"start": start_date, "end": end_date}
             complete_stage(run_id, 7, items_count=len(result.get("activities", [])))
 
             start_stage(run_id, 8, "Enriching activities with sentiment analysis")
@@ -327,7 +564,8 @@ def analyze():
             v_count = sum(1 for a in result.get("activities", []) if a.get("type") == "video" or a.get("video_url") or a.get("video_thumbnail") or a.get("is_video") or (a.get("video_status") and a.get("video_status") != "No video"))
             v_likes_count = sum(1 for a in result.get("activities", []) if a.get("type") == "like" and (a.get("video_url") or a.get("video_thumbnail") or a.get("is_video") or (a.get("video_status") and a.get("video_status") != "No video")))
             complete_pipeline_run(run_id, status="completed", summary={"cards_found": len(result.get("activities", [])), "videos_detected": v_count, "video_likes_detected": v_likes_count, "activities_stored": len(result.get("activities", []))})
-            return jsonify(result)
+            g.analysis_run_context["analysis_result"] = result
+            return jsonify(_paginate_analysis_payload(result, filters.get("page", 1), filters.get("per_page")))
         except Exception as e:
             fail_stage(run_id, 6, str(e))
             complete_pipeline_run(run_id, status="failed")
@@ -405,8 +643,11 @@ def analyze():
                 except Exception:
                     p_picture = None
 
-            p_start = p.get("startDate") or p.get("start_date") or None
-            p_end = p.get("endDate") or p.get("end_date") or None
+            p_start, start_date_valid = _normalize_batch_date(p.get("startDate") or p.get("start_date"))
+            p_end, end_date_valid = _normalize_batch_date(p.get("endDate") or p.get("end_date"))
+
+            if not start_date_valid or not end_date_valid:
+                return jsonify({"error": f"For {p_name}, dates must be valid DD/MM/YYYY or YYYY-MM-DD values."}), 400
 
             if p_start and p_end and p_start > p_end:
                 return jsonify({"error": f"For {p_name}, Start Date must be on or before End Date."}), 400
@@ -464,6 +705,7 @@ def analyze():
             )
 
             p_analysis["picture"] = p_picture
+            p_analysis["requested_date_range"] = {"start": p_start, "end": p_end}
             p_analysis["retrieval_status"] = p_status_tracker.get("status", "")
             p_analysis["status_type"] = p_status_tracker.get("status_type", "")
             p_analysis["retrieval_completeness"] = p_status_tracker.get("retrieval_completeness", "COMPLETE")
@@ -555,7 +797,8 @@ def analyze():
         v_likes_count = sum(1 for a in all_activities if a.get("type") == "like" and (a.get("video_url") or a.get("video_thumbnail") or a.get("is_video") or (a.get("video_status") and a.get("video_status") != "No video")))
         complete_pipeline_run(run_id, status="completed", summary={"cards_found": len(all_activities), "videos_detected": v_count, "video_likes_detected": v_likes_count, "activities_stored": len(all_activities)})
         clear_current_run_id()
-        return jsonify(combined_result)
+        g.analysis_run_context["analysis_result"] = combined_result
+        return jsonify(_paginate_analysis_payload(combined_result, data.get("page", 1), data.get("per_page")))
 
     # Pull defaults from session["selected_profile"] if present
     sess_prof = session.get("selected_profile") or {}
@@ -780,6 +1023,7 @@ def analyze():
         "headline": result.get("headline"),
         "picture": target_picture,
         "date_range": result.get("date_range"),
+        "requested_date_range": {"start": start_date, "end": end_date},
         "total_activities": result.get("total_activities", 0),
         "by_type": result.get("by_type", {}),
         "posts_count": result.get("posts_count", 0),
@@ -804,6 +1048,7 @@ def analyze():
 
     result["is_multi_profile"] = False
     result["profiles_count"] = 1
+    result["requested_date_range"] = {"start": start_date, "end": end_date}
     result["picture"] = target_picture
     result["filtered_activity_types"] = kinds
     result["profile_results"] = [single_summary]
@@ -824,7 +1069,8 @@ def analyze():
     v_likes_count = sum(1 for a in result.get("activities", []) if a.get("type") == "like" and (a.get("video_url") or a.get("video_thumbnail") or a.get("is_video") or (a.get("video_status") and a.get("video_status") != "No video")))
     complete_pipeline_run(run_id, status="completed", summary={"cards_found": len(result.get("activities", [])), "videos_detected": v_count, "video_likes_detected": v_likes_count, "activities_stored": len(result.get("activities", []))})
     clear_current_run_id()
-    return jsonify(result)
+    g.analysis_run_context["analysis_result"] = result
+    return jsonify(_paginate_analysis_payload(result, data.get("page", 1), data.get("per_page")))
 
 
 
@@ -840,6 +1086,8 @@ def get_latest_analysis():
     req_subject_id = (request.args.get("subject_id") or "").strip()
     req_profile_url = (request.args.get("profile_url") or "").strip()
     req_subject_name = (request.args.get("subject_name") or "").strip()
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", type=int)
 
     req_slug = extract_slug(req_profile_url) or extract_slug(req_subject_id)
 
@@ -872,17 +1120,19 @@ def get_latest_analysis():
         req_end = request.args.get("endDate") or request.args.get("end_date") or None
 
         if is_match and analysis:
-            # If specific date range is requested, ensure latest analysis covers this range
-            a_range = analysis.get("date_range") or {}
+            # Compare against the original query bounds, not observed activity extrema.
             date_match = True
-            if req_start and a_range.get("start") and a_range.get("start") != req_start:
-                date_match = False
-            if req_end and a_range.get("end") and a_range.get("end") != req_end:
-                date_match = False
+            if isinstance(analysis.get("requested_date_range"), dict):
+                requested_range = analysis["requested_date_range"]
+                date_match = (requested_range.get("start") == req_start and requested_range.get("end") == req_end)
+            else:
+                # Legacy records only stored observed activity extrema, which cannot prove
+                # the requested bounds. Use profile history filtering for explicit ranges.
+                date_match = not req_start and not req_end
 
             if date_match:
                 return jsonify({
-                    **analysis,
+                    **_paginate_analysis_payload(analysis, page, per_page),
                     "has_data": True
                 })
 
@@ -909,16 +1159,17 @@ def get_latest_analysis():
                         retrieval_completeness="HISTORICAL_PRESERVED"
                     )
                     filtered_hist["is_historical"] = True
+                    filtered_hist["requested_date_range"] = {"start": req_start, "end": req_end}
                     filtered_hist["historical_analyzed_at"] = historical.get("historical_analyzed_at") or historical.get("analyzed_at") or historical.get("updated_at")
                     filtered_hist["original_unfiltered_count"] = len(raw_hist)
                     return jsonify({
-                        **filtered_hist,
+                        **_paginate_analysis_payload(filtered_hist, page, per_page),
                         "has_data": True,
                         "is_historical": True
                     })
 
                 return jsonify({
-                    **historical,
+                    **_paginate_analysis_payload(historical, page, per_page),
                     "has_data": True,
                     "is_historical": True
                 })
@@ -938,7 +1189,7 @@ def get_latest_analysis():
         return jsonify({"error": "No analysis has been run yet.", "has_data": False}), 404
 
     return jsonify({
-        **analysis,
+        **_paginate_analysis_payload(analysis, page, per_page),
         "has_data": True
     })
 

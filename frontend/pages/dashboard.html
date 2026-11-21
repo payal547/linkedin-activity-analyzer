@@ -1102,8 +1102,10 @@
         }
 
     </style>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/site-theme.css">
 </head>
-<body>
+<body class="app-page dashboard-page">
 
     <!-- YouTube-Style Live Top Progress Bar -->
     <div id="ytAnalysisProgressBar" class="yt-progress-bar" style="display: none;"></div>
@@ -1116,9 +1118,11 @@
 <header class="header">
     <h1>LinkedIn Activity Analyzer</h1>
     <nav>
-        <a href="/">Analyze URL</a>
-        <a href="/activity-filter">Change Filters</a>
-        <a href="/connections">Connections (Optional)</a>
+        <a href="/">Analyzer</a>
+        <a href="/saved-profiles">Saved Profiles</a>
+        <a href="/analytics">Analytics</a>
+        <a href="/content-library">Content Library</a>
+        <a href="/connections">Connections</a>
     </nav>
 </header>
 
@@ -1181,6 +1185,20 @@
 
 
 
+    <section id="profileAnalysisHistory" class="panel-card" style="margin:0 0 20px; padding:18px; display:none;">
+        <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap;">
+            <div><h3 style="margin:0 0 5px;">Analysis History</h3><p id="profileHistoryNote" style="margin:0; color:#64748b; font-size:13px;"></p></div>
+            <a id="backToAnalytics" href="/analytics" class="action-btn action-btn-secondary">Overall Analytics</a>
+        </div>
+        <div id="profileRunRows" style="margin-top:12px;"></div>
+        <div id="profileTrendChart" style="margin-top:16px; min-height:190px;"></div>
+        <div id="profileRunPager" style="display:none; justify-content:flex-end; gap:8px; margin-top:12px;">
+            <button id="profileRunPrev" type="button" class="action-btn action-btn-secondary">Previous</button>
+            <span id="profileRunPageLabel" style="align-self:center; color:#64748b; font-size:12px;"></span>
+            <button id="profileRunNext" type="button" class="action-btn action-btn-secondary">Next</button>
+        </div>
+    </section>
+
     <!-- Dashboard Content Layout -->
     <div class="dashboard-body">
 
@@ -1226,6 +1244,18 @@
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
                 <h3 style="font-size:18px; color:#1e293b; font-weight:700;">Actual Posts & Activity Details</h3>
                 <span id="timelineItemCount" style="font-size:13px; color:#64748b; font-weight:600;">0 items</span>
+            </div>
+
+            <div id="activityPagination" class="activity-pagination" style="display:none; position:sticky; top:12px; z-index:10; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap; margin:0 0 16px; padding:12px 14px; border:1px solid #e2e8f0; border-radius:12px; background:#fff; box-shadow:0 8px 24px rgba(15,23,42,.08);">
+                <span id="activityPageLabel" style="font-size:13px; color:#475569; font-weight:600;"></span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <label for="activityPageSize" style="font-size:12px; color:#64748b;">Per page</label>
+                    <select id="activityPageSize" onchange="changeActivityPageSize(this.value)" style="padding:7px 9px; border:1px solid #cbd5e1; border-radius:8px; background:#fff; color:#334155;">
+                        <option value="10">10</option><option value="20" selected>20</option><option value="50">50</option>
+                    </select>
+                    <button type="button" id="prevActivityPage" class="action-btn action-btn-secondary" onclick="changeActivityPage(-1)" style="padding:7px 12px;">Previous</button>
+                    <button type="button" id="nextActivityPage" class="action-btn" onclick="changeActivityPage(1)" style="padding:7px 12px;">Next</button>
+                </div>
             </div>
 
             <div class="timeline-container" id="activitiesTimeline">

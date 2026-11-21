@@ -81,6 +81,50 @@ function formatDateRangeDDMMYY(start, end) {
 
 }
 
+const FAILED_DASHBOARD_MEDIA_KEY = "failedDashboardMediaPaths";
+
+function dashboardMediaKey(url) {
+    try {
+        const parsed = new URL(url, window.location.href);
+        if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return "";
+        return `${parsed.origin}${parsed.pathname}`;
+    } catch (error) {
+        return "";
+    }
+}
+
+function isDashboardMediaKnownBroken(url) {
+    const key = dashboardMediaKey(url);
+    if (!key) return false;
+    try {
+        return JSON.parse(localStorage.getItem(FAILED_DASHBOARD_MEDIA_KEY) || "[]").includes(key);
+    } catch (error) {
+        return false;
+    }
+}
+
+function markDashboardImageFailed(img, fallbackSrc = "") {
+    if (!img) return;
+    const key = dashboardMediaKey(img.currentSrc || img.src);
+    if (key) {
+        try {
+            const previous = JSON.parse(localStorage.getItem(FAILED_DASHBOARD_MEDIA_KEY) || "[]");
+            const known = Array.isArray(previous) ? previous : [];
+            if (!known.includes(key)) known.push(key);
+            localStorage.setItem(FAILED_DASHBOARD_MEDIA_KEY, JSON.stringify(known.slice(-100)));
+        } catch (error) {}
+    }
+
+    if (fallbackSrc && img.dataset.fallbackApplied !== "true") {
+        img.dataset.fallbackApplied = "true";
+        img.src = fallbackSrc;
+        return;
+    }
+
+    const mediaBox = img.closest(".post-media-box, .feed-post-media, .feed-post-video-poster");
+    if (mediaBox) mediaBox.style.display = "none";
+}
+
 
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -93,13 +137,15 @@ document.addEventListener("DOMContentLoaded", () => {
 
 async function initDashboard() {
 
+    const dashboardQuery = new URLSearchParams(window.location.search);
+
     // 0. Synchronously populate preliminary profile header while fetching analysis data
 
     try {
 
         const storedProfile = JSON.parse(sessionStorage.getItem("selectedProfile") || "{}");
 
-        const preliminaryName = storedProfile.name || localStorage.getItem("selectedFriend");
+        const preliminaryName = dashboardQuery.get("subject_name") || storedProfile.name || localStorage.getItem("selectedFriend");
 
         if (preliminaryName) {
 
@@ -119,7 +165,7 @@ async function initDashboard() {
 
         }
 
-        const preliminaryUrl = storedProfile.profile_url || localStorage.getItem("selectedProfileUrl");
+        const preliminaryUrl = dashboardQuery.get("profile_url") || storedProfile.profile_url || localStorage.getItem("selectedProfileUrl");
 
         if (preliminaryUrl) {
 
@@ -163,13 +209,15 @@ async function initDashboard() {
 
         const storedProfile = JSON.parse(sessionStorage.getItem("selectedProfile") || "{}");
 
-        targetSubjectId = (storedProfile.subject_id || storedProfile.id || localStorage.getItem("selectedSubjectId") || "").trim();
+        targetSubjectId = (dashboardQuery.get("subject_id") || storedProfile.subject_id || storedProfile.id || localStorage.getItem("selectedSubjectId") || "").trim();
 
-        targetProfileUrl = (storedProfile.profile_url || localStorage.getItem("selectedProfileUrl") || "").trim();
+        targetProfileUrl = (dashboardQuery.get("profile_url") || storedProfile.profile_url || localStorage.getItem("selectedProfileUrl") || "").trim();
 
-        targetSubjectName = (storedProfile.name || localStorage.getItem("selectedFriend") || "").trim();
+        targetSubjectName = (dashboardQuery.get("subject_name") || storedProfile.name || localStorage.getItem("selectedFriend") || "").trim();
 
     } catch (e) {}
+
+    if (targetProfileUrl || targetSubjectId) loadProfileAnalysisHistory(targetProfileUrl || targetSubjectId);
 
 
 
@@ -222,13 +270,16 @@ async function initDashboard() {
 
                 // Prevent old date filters from overriding new user selections
                 if (isMatch && activeFilter) {
-                    const reqStart = activeFilter.startDate || null;
-                    const reqEnd = activeFilter.endDate || null;
-                    const storedRange = parsedStored.date_range || {};
-                    if (reqStart && storedRange.start && storedRange.start !== reqStart) {
-                        isMatch = false;
-                    }
-                    if (reqEnd && storedRange.end && storedRange.end !== reqEnd) {
+                    const reqStart = activeFilter.batch ? null : (activeFilter.startDate || null);
+                    const reqEnd = activeFilter.batch ? null : (activeFilter.endDate || null);
+                    if (parsedStored.requested_date_range && typeof parsedStored.requested_date_range === "object") {
+                        const requestedRange = parsedStored.requested_date_range;
+                        if ((requestedRange.start || null) !== reqStart || (requestedRange.end || null) !== reqEnd) {
+                            isMatch = false;
+                        }
+                    } else if (reqStart || reqEnd) {
+                        // Legacy cached analyses do not record request bounds, so they cannot
+                        // safely satisfy an explicit date-filter request.
                         isMatch = false;
                     }
                 }
@@ -267,10 +318,12 @@ async function initDashboard() {
 
         if (targetSubjectName) qp.push(`subject_name=${encodeURIComponent(targetSubjectName)}`);
 
-        if (activeFilter) {
+        if (activeFilter && !activeFilter.batch) {
             if (activeFilter.startDate) qp.push(`startDate=${encodeURIComponent(activeFilter.startDate)}`);
             if (activeFilter.endDate) qp.push(`endDate=${encodeURIComponent(activeFilter.endDate)}`);
         }
+
+        qp.push("page=1", "per_page=20");
 
         if (qp.length > 0) apiUrl += `?${qp.join("&")}`;
 
@@ -362,9 +415,87 @@ async function initDashboard() {
 
 }
 
+async function loadProfileAnalysisHistory(profileIdentity, page = 1) {
+    const panel = document.getElementById("profileAnalysisHistory");
+    if (!panel || !profileIdentity) return;
+    const slugMatch = String(profileIdentity).match(/(?:linkedin\.com\/in\/)?([^/?#]+)\/?$/i);
+    const slug = slugMatch ? slugMatch[1] : String(profileIdentity);
+    panel.style.display = "block";
+    const rows = document.getElementById("profileRunRows");
+    rows.innerHTML = "<p style='color:#64748b;font-size:13px;'>Loading saved profile history…</p>";
+    try {
+        const encodedSlug = encodeURIComponent(slug);
+        const [profileResponse, runResponse, trendResponse] = await Promise.all([
+            fetch(`/api/dashboard/profiles/${encodedSlug}`),
+            fetch(`/api/dashboard/profiles/${encodedSlug}/runs?page=${page}&per_page=10`),
+            fetch(`/api/dashboard/trends?profile=${encodedSlug}&months=12`)
+        ]);
+        const profileData = await profileResponse.json();
+        const runData = await runResponse.json();
+        const trendData = await trendResponse.json();
+        if (!profileResponse.ok && !runResponse.ok) throw new Error(profileData.error || runData.error || "Profile history is unavailable.");
+        const history = profileData.history || null;
+        const note = document.getElementById("profileHistoryNote");
+        note.textContent = history
+            ? `Stored successful snapshot updated ${formatDateDDMMYY(history.historical_analyzed_at)} · ${history.total_activities == null ? "activity count unavailable" : `${Number(history.total_activities).toLocaleString()} accumulated activities`}. New run summaries are tracked from this release forward.`
+            : "No preserved successful activity snapshot exists for this profile. Run history starts with this release.";
+        const runRows = runData.items || [];
+        if (!runRows.length) {
+            rows.innerHTML = `<p style='color:#64748b;font-size:13px;'>No durable analysis runs recorded for this profile yet. Earlier runs were not reconstructed.</p>`;
+        } else {
+            rows.innerHTML = `<div style='overflow:auto'><table style='width:100%;border-collapse:collapse;font-size:13px;'><thead><tr><th style='text-align:left;padding:9px;border-bottom:1px solid #e2e8f0;'>Date</th><th style='text-align:left;padding:9px;border-bottom:1px solid #e2e8f0;'>Requested range</th><th style='text-align:left;padding:9px;border-bottom:1px solid #e2e8f0;'>Status</th><th style='text-align:left;padding:9px;border-bottom:1px solid #e2e8f0;'>Activities</th><th style='text-align:left;padding:9px;border-bottom:1px solid #e2e8f0;'>Posts</th><th style='text-align:left;padding:9px;border-bottom:1px solid #e2e8f0;'>Videos</th><th style='text-align:left;padding:9px;border-bottom:1px solid #e2e8f0;'>Change</th></tr></thead><tbody>${runRows.map((run, index) => {
+                const previous = runRows[index + 1];
+                const sameRange = JSON.stringify(run.profile_requested_date_range || run.requested_date_range || null) === JSON.stringify(previous?.profile_requested_date_range || previous?.requested_date_range || null);
+                const sameTypes = JSON.stringify([...(run.profile_requested_activity_types || run.requested_activity_types || [])].sort()) === JSON.stringify([...(previous?.profile_requested_activity_types || previous?.requested_activity_types || [])].sort());
+                const comparable = previous && sameRange && sameTypes && run.total_activities != null && previous.total_activities != null;
+                const delta = comparable ? Number(run.total_activities) - Number(previous.total_activities) : null;
+                const change = delta == null ? (previous ? "Filters differ" : "—") : `${delta > 0 ? "+" : ""}${delta} vs previous comparable run`;
+                const range = run.profile_requested_date_range || run.requested_date_range || {};
+                const rangeLabel = range.start || range.end ? `${formatDateDDMMYY(range.start) || "…"} – ${formatDateDDMMYY(range.end) || "…"}` : "All dates";
+                return `<tr><td style='padding:9px;border-bottom:1px solid #edf1f6;'>${escapeHTML(formatDateDDMMYY(run.completed_at || run.started_at))}</td><td style='padding:9px;border-bottom:1px solid #edf1f6;'>${escapeHTML(rangeLabel)}</td><td style='padding:9px;border-bottom:1px solid #edf1f6;'>${escapeHTML(run.status || "Unknown")}</td><td style='padding:9px;border-bottom:1px solid #edf1f6;'>${run.total_activities == null ? "—" : Number(run.total_activities).toLocaleString()}</td><td style='padding:9px;border-bottom:1px solid #edf1f6;'>${run.posts_count == null ? "—" : Number(run.posts_count).toLocaleString()}</td><td style='padding:9px;border-bottom:1px solid #edf1f6;'>${run.videos_count == null ? "—" : Number(run.videos_count).toLocaleString()}</td><td style='padding:9px;border-bottom:1px solid #edf1f6;'>${escapeHTML(change)}</td></tr>`;
+            }).join("")}</tbody></table></div>`;
+        }
+        const pager = document.getElementById("profileRunPager");
+        pager.style.display = Number(runData.total_pages || 1) > 1 ? "flex" : "none";
+        document.getElementById("profileRunPageLabel").textContent = `Page ${runData.page || 1} of ${runData.total_pages || 1}`;
+        document.getElementById("profileRunPrev").disabled = Number(runData.page || 1) <= 1;
+        document.getElementById("profileRunNext").disabled = Number(runData.page || 1) >= Number(runData.total_pages || 1);
+        document.getElementById("profileRunPrev").onclick = () => loadProfileAnalysisHistory(slug, Math.max(1, Number(runData.page || 1) - 1));
+        document.getElementById("profileRunNext").onclick = () => loadProfileAnalysisHistory(slug, Number(runData.page || 1) + 1);
+        renderProfileTrend(trendData.items || []);
+    } catch (error) {
+        rows.innerHTML = `<p style='color:#9b3c32;font-size:13px;'>${escapeHTML(error.message || "Profile history could not be loaded.")}</p>`;
+    }
+}
+
+function renderProfileTrend(items) {
+    const host = document.getElementById("profileTrendChart");
+    if (!host) return;
+    const known = items.filter(item => item.activity_count !== null && item.activity_count !== undefined);
+    if (!known.length) { host.innerHTML = "<p style='color:#64748b;font-size:13px;'>No dated activity records are available for a monthly profile trend. Empty months remain unknown.</p>"; return; }
+    const width = 760, height = 180, left = 34, top = 15, bottom = 30, max = Math.max(1, ...known.map(item => Number(item.activity_count))), plotH = height - top - bottom, plotW = width - left - 10;
+    const segments = [];
+    let segment = [];
+    items.forEach((item, index) => {
+        if (item.activity_count == null) {
+            if (segment.length) segments.push(segment);
+            segment = [];
+            return;
+        }
+        const x = left + index * plotW / Math.max(1, items.length - 1);
+        const y = top + plotH - Number(item.activity_count) / max * plotH;
+        segment.push(`${x},${y}`);
+    });
+    if (segment.length) segments.push(segment);
+    const lines = segments.filter(points => points.length > 1).map(points => `<polyline points='${points.join(" ")}' fill='none' stroke='#1770cf' stroke-width='3'/>`).join("");
+    host.innerHTML = `<h4 style='margin:0 0 5px;font-size:14px;'>Monthly stored activity trend</h4><svg viewBox='0 0 ${width} ${height}' role='img' aria-label='Monthly stored activity trend' style='width:100%;height:180px;'><line x1='${left}' y1='${top + plotH}' x2='${width - 10}' y2='${top + plotH}' stroke='#dbe4ee'/>${lines}${items.map((item, index) => { const x = left + index * plotW / Math.max(1, items.length - 1); const isUnknown = item.activity_count == null; const y = isUnknown ? top + plotH + 7 : top + plotH - Number(item.activity_count) / max * plotH; return `<circle cx='${x}' cy='${y}' r='4' fill='${isUnknown ? "none" : "#fff"}' stroke='${isUnknown ? "#b6c2d0" : "#1770cf"}' stroke-width='2'><title>${escapeHTML(item.month)}: ${isUnknown ? "unknown coverage" : `${item.activity_count} stored activities`}</title></circle><text x='${x}' y='${height - 7}' text-anchor='middle' font-size='10' fill='#728198'>${escapeHTML(item.month.slice(5))}</text>`; }).join("")}</svg><p style='margin:0;color:#64748b;font-size:11px;'>Only stored dated records are counted; no-data months are unknown.</p>`;
+}
+
 
 
 function renderAnalysisResults(data) {
+
+    renderActivityPagination(data.activity_pagination);
 
     // 1. Retrieve Profile Details
 
@@ -1162,7 +1293,7 @@ function renderAnalysisResults(data) {
 
             const pUrl = pRes.subject_url || "";
 
-            const pAvatar = pRes.picture || defaultAvatar;
+            const pAvatar = pRes.picture && !isDashboardMediaKnownBroken(pRes.picture) ? pRes.picture : defaultAvatar;
 
 
 
@@ -1216,7 +1347,7 @@ function renderAnalysisResults(data) {
 
                     <div class="profile-section-info">
 
-                        <img class="profile-section-avatar" src="${escapeAttr(pAvatar)}" alt="${escapeAttr(pName)}" onerror="this.src='${defaultAvatar}';">
+                        <img class="profile-section-avatar" src="${escapeAttr(pAvatar)}" alt="${escapeAttr(pName)}" onerror="markDashboardImageFailed(this, '${defaultAvatar}');">
 
                         <div>
 
@@ -1368,7 +1499,8 @@ function renderAnalysisResults(data) {
 
         if (countEl) {
 
-            countEl.textContent = `${totalItems} item${totalItems === 1 ? '' : 's'}`;
+            const overallCount = Number(data.activity_pagination?.total_items) || totalItems;
+            countEl.textContent = `${overallCount.toLocaleString()} item${overallCount === 1 ? '' : 's'}`;
 
         }
 
@@ -1390,11 +1522,13 @@ function renderAnalysisResults(data) {
 
             if (activities.length > 0) {
 
-                countEl.textContent = `${activities.length} item${activities.length === 1 ? '' : 's'}`;
+                const overallCount = Number(data.activity_pagination?.total_items) || activities.length;
+                countEl.textContent = `${overallCount.toLocaleString()} item${overallCount === 1 ? '' : 's'}`;
 
             } else if (histData && histData.activities && histData.activities.length > 0) {
 
-                countEl.textContent = `${histData.activities.length} historical item${histData.activities.length === 1 ? '' : 's'}`;
+                const overallCount = Number(data.activity_pagination?.total_items) || histData.activities.length;
+                countEl.textContent = `${overallCount.toLocaleString()} historical item${overallCount === 1 ? '' : 's'}`;
 
             } else {
 
@@ -1768,6 +1902,71 @@ function renderAnalysisResults(data) {
 
 }
 
+function renderActivityPagination(pagination) {
+    const bar = document.getElementById("activityPagination");
+    if (!bar || !pagination) return;
+    const page = Number(pagination.page) || 1;
+    const pages = Number(pagination.total_pages) || 1;
+    const total = Number(pagination.total_items) || 0;
+    const size = Number(pagination.per_page) || 20;
+    bar.style.display = pages > 1 ? "flex" : "none";
+    const label = document.getElementById("activityPageLabel");
+    if (label) label.textContent = `Page ${page} of ${pages} | ${total.toLocaleString()} activities`;
+    const select = document.getElementById("activityPageSize");
+    if (select && Array.from(select.options).some(option => Number(option.value) === size)) select.value = String(size);
+    const prev = document.getElementById("prevActivityPage");
+    const next = document.getElementById("nextActivityPage");
+    if (prev) prev.disabled = page <= 1;
+    if (next) next.disabled = page >= pages;
+}
+
+async function fetchActivityPage(page, perPage) {
+    const profile = JSON.parse(sessionStorage.getItem("selectedProfile") || "{}");
+    let filter = {};
+    try { filter = JSON.parse(localStorage.getItem("activityFilter") || "{}"); } catch (e) {}
+    const params = new URLSearchParams();
+    const subjectId = profile.subject_id || profile.id || (!profile.name ? localStorage.getItem("selectedSubjectId") : "");
+    const profileUrl = profile.profile_url || (!profile.name ? localStorage.getItem("selectedProfileUrl") : "");
+    const subjectName = profile.name || localStorage.getItem("selectedFriend");
+    if (subjectId) params.set("subject_id", subjectId);
+    if (profileUrl) params.set("profile_url", profileUrl);
+    if (subjectName) params.set("subject_name", subjectName);
+    if (!filter.batch && filter.startDate) params.set("startDate", filter.startDate);
+    if (!filter.batch && filter.endDate) params.set("endDate", filter.endDate);
+    params.set("page", String(page));
+    params.set("per_page", String(perPage));
+    const response = await fetch(`/api/analysis/latest?${params.toString()}`);
+    const result = await response.json();
+    if (!response.ok || result.has_data === false) throw new Error(result.error || "Could not load this activity page.");
+    sessionStorage.setItem("currentAnalysis", JSON.stringify(result));
+    renderAnalysisResults(result);
+}
+
+async function changeActivityPage(offset) {
+    const pagination = JSON.parse(sessionStorage.getItem("currentAnalysis") || "{}").activity_pagination || {};
+    const requestedPage = Math.max(1, (Number(pagination.page) || 1) + offset);
+    const size = Number(pagination.per_page) || 20;
+    const button = document.getElementById(offset < 0 ? "prevActivityPage" : "nextActivityPage");
+    if (button) button.disabled = true;
+    try {
+        await fetchActivityPage(requestedPage, size);
+        document.getElementById("activityPagination")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    } catch (error) {
+        console.error("Activity page load failed", error);
+        const current = JSON.parse(sessionStorage.getItem("currentAnalysis") || "{}");
+        renderActivityPagination(current.activity_pagination);
+    }
+}
+
+async function changeActivityPageSize(value) {
+    try { await fetchActivityPage(1, Number(value) || 20); }
+    catch (error) {
+        console.error("Activity page size update failed", error);
+        const current = JSON.parse(sessionStorage.getItem("currentAnalysis") || "{}");
+        renderActivityPagination(current.activity_pagination);
+    }
+}
+
 
 
 function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
@@ -1842,7 +2041,7 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
     const defaultAvatar = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3E%3Cpath d='M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z'/%3E%3C/svg%3E";
 
-    const avatarSrc = authorPhoto || defaultAvatar;
+    const avatarSrc = authorPhoto && !isDashboardMediaKnownBroken(authorPhoto) ? authorPhoto : defaultAvatar;
 
 
 
@@ -1952,7 +2151,7 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
     let mediaHTML = "";
 
-    if (mediaUrl) {
+    if (mediaUrl && !isDashboardMediaKnownBroken(mediaUrl)) {
 
         if (mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) || mediaUrl.includes("images.unsplash") || mediaUrl.includes("licdn.com") || mediaUrl.includes("feedshare")) {
 
@@ -1960,7 +2159,7 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
                 <div class="feed-post-media post-media-box">
 
-                    <img src="${escapeAttr(mediaUrl)}" alt="Post media" onerror="this.parentElement.style.display='none';">
+                    <img src="${escapeAttr(mediaUrl)}" alt="Post media" onerror="markDashboardImageFailed(this);">
 
                 </div>
 
@@ -2188,7 +2387,7 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
             `;
 
-        } else if (videoThumbnail) {
+        } else if (videoThumbnail && !isDashboardMediaKnownBroken(videoThumbnail)) {
 
             const watchLink = postUrl || videoUrl || "#";
 
@@ -2196,7 +2395,7 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
                 <div class="feed-post-video-poster" onclick="${watchLink !== '#' ? `window.open('${escapeAttr(watchLink)}', '_blank', 'noopener,noreferrer')` : ''}">
 
-                    <img src="${escapeAttr(videoThumbnail)}" alt="Video thumbnail" onerror="this.parentElement.style.display='none';">
+                    <img src="${escapeAttr(videoThumbnail)}" alt="Video thumbnail" onerror="markDashboardImageFailed(this);">
 
                     <div class="video-play-overlay">
 
@@ -2342,7 +2541,7 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
         <div class="feed-post-header post-card-header">
 
-            <img class="feed-author-avatar" src="${escapeAttr(avatarSrc)}" alt="${escapeAttr(postAuthor)}" onerror="this.src='${defaultAvatar}';">
+            <img class="feed-author-avatar" src="${escapeAttr(avatarSrc)}" alt="${escapeAttr(postAuthor)}" onerror="markDashboardImageFailed(this, '${defaultAvatar}');">
 
             <div class="feed-author-meta">
 
@@ -2496,6 +2695,10 @@ async function handleOfflineUpload(event) {
 
     formData.append("file", fileInput.files[0]);
 
+    formData.append("page", "1");
+
+    formData.append("per_page", "20");
+
 
 
     // Pull current filter criteria
@@ -2569,6 +2772,16 @@ async function handleOfflineUpload(event) {
 
 
         sessionStorage.setItem("currentAnalysis", JSON.stringify(result));
+        sessionStorage.setItem("selectedProfile", JSON.stringify({
+            name: result.subject_name || "Imported Activity Data",
+            profile_url: result.subject_url || "",
+            headline: result.headline || "Imported LinkedIn Activity",
+            source: "imported"
+        }));
+        localStorage.setItem("activityFilter", JSON.stringify({
+            startDate: result.requested_date_range?.start || "",
+            endDate: result.requested_date_range?.end || ""
+        }));
 
         if (statusEl) {
 

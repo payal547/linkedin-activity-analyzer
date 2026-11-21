@@ -544,12 +544,18 @@
             box-shadow: 0 2px 8px rgba(0,0,0,0.05);
         }
     </style>
+    <link rel="stylesheet" href="/css/style.css">
+    <link rel="stylesheet" href="/css/site-theme.css">
 </head>
-<body>
+<body class="app-page connections-page">
 
 <header class="header">
     <h1>LinkedIn Activity Analyzer</h1>
-    <a href="/login">Account</a>
+    <nav aria-label="Main navigation">
+        <a href="/">Analyzer</a><a href="/saved-profiles">Saved Profiles</a>
+        <a href="/analytics">Analytics</a><a href="/content-library">Content Library</a>
+        <a href="/connections" aria-current="page">Connections</a><a href="/login">Account</a>
+    </nav>
 </header>
 
 <div class="container">

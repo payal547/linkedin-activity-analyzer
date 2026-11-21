@@ -3,7 +3,7 @@
 import re
 from collections import Counter
 from datetime import date, timedelta
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Set
 
 from services.sentiment_service import enrich_activities_list, compute_sentiment_summary
 

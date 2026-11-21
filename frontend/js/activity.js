@@ -73,6 +73,14 @@ function formatLocalDateToISO(d) {
     return `${yyyy}-${mm}-${dd}`;
 }
 
+async function readActivityApiJson(response) {
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("application/json")) {
+        throw new Error(`The analysis server returned an unexpected response (HTTP ${response.status}). Please retry; if it continues, check the Flask server log.`);
+    }
+    return response.json();
+}
+
 function parseDateStringToLocalDate(str) {
     if (!str) return null;
     const s = String(str).trim();
@@ -237,16 +245,8 @@ async function initActivityFilter() {
 function updatePresetButtonUI(activePreset) {
     const buttons = document.querySelectorAll(".preset-btn");
     buttons.forEach(btn => {
-        const text = btn.textContent.toLowerCase();
-        let match = false;
-        if (activePreset === "all" && text.includes("all")) match = true;
-        else if (activePreset === "today" && text.includes("today")) match = true;
-        else if (activePreset === "7days" && text.includes("7")) match = true;
-        else if (activePreset === "10days" && text.includes("10")) match = true;
-        else if (activePreset === "30days" && text.includes("30")) match = true;
-        else if ((activePreset === "1year" || activePreset === "365days") && (text.includes("1 year") || text.includes("year"))) match = true;
-        else if (activePreset === "older1year" && text.includes("1-2 years")) match = true;
-        else if (activePreset === "custom" && (text.includes("custom") || text.includes("manual"))) match = true;
+        const presetCall = (btn.getAttribute("onclick") || "").match(/applyDatePreset\(['"]([^'"]+)['"]\)/);
+        const match = Boolean(presetCall && presetCall[1] === activePreset);
 
         if (match) {
             btn.classList.add("active");
@@ -484,7 +484,9 @@ async function analyzeActivity() {
         dateType: currentDatePreset,
         startDate: startDateISO,
         endDate: endDateISO,
-        activities: activities
+        activities: activities,
+        page: 1,
+        per_page: 20
     };
 
     if (submitBtn) {
@@ -503,7 +505,7 @@ async function analyzeActivity() {
             body: JSON.stringify(payload)
         });
 
-        const result = await response.json();
+        const result = await readActivityApiJson(response);
 
         if (!response.ok) {
             throw new Error(result.error || "Activity analysis failed.");

@@ -1,8 +1,8 @@
 .env
-__pycache__/
-*.pyc
 .venv/
 venv/
+__pycache__/
+*.pyc
 
 # Playwright & Browser Cache / Runtime Profiles
 backend/data/browser_cache/
@@ -12,7 +12,14 @@ backend/data/playwright_session.json
 # Scraper Debug & Runtime Logs
 backend/data/scraper_debug.log
 *.log
-logs/*.log
+logs/*.log*
+
+# Local member/profile data and runtime caches. Keep only documented examples.
+backend/data/*.json
+!backend/data/*.example.json
+backend/data/*.tmp
+backend/data/*session*
+backend/data/*cookie*
 
 # Runtime Temporary Files & Test State
 backend/data/*.tmp

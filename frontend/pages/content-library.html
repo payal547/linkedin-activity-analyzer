@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Content Library | LinkedIn Activity Analyzer</title>
+  <link rel="stylesheet" href="/css/analytics.css">
+  <link rel="stylesheet" href="/css/site-theme.css">
+  <style>
+    .library-intro { margin-bottom: 0; }
+    .library-count { display: inline-flex; padding: 8px 12px; border: 1px solid #d8e8f7; border-radius: 999px; background: #eff7ff; color: #205e9a; font-size: 13px; font-weight: 750; white-space: nowrap; }
+    .library-status { min-height: 42px; margin-bottom: 14px; }
+    .library-filters { grid-template-columns: minmax(190px, 2fr) minmax(150px, 1.3fr) repeat(3, minmax(130px, 1fr)) auto; }
+    .content-type-tabs { display: flex; gap: 8px; margin: 18px 0 14px; overflow-x: auto; padding: 2px 1px 6px; }
+    .content-type-tab { flex: 0 0 auto; padding: 9px 13px; border: 1px solid #d9e3ee; border-radius: 999px; background: #f8fafc; color: #53667f; font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .content-type-tab:hover { border-color: #b8d1ed; background: #f0f7ff; }
+    .content-type-tab[aria-pressed="true"] { border-color: #1769d2; color: #fff; background: linear-gradient(110deg, #1769d2, #2784dc); box-shadow: 0 5px 12px rgba(23, 105, 210, .18); }
+    .library-card { display: flex; flex-direction: column; min-width: 0; }
+    .library-card .content-card-body { flex: 1; }
+    .library-card .content-text { max-height: none; overflow-wrap: anywhere; }
+    .library-media-empty, .library-media-error { display: grid; min-height: 130px; padding: 18px; place-content: center; gap: 6px; color: #687991; background: #f2f5f9; text-align: center; font-size: 12px; }
+    .library-unavailable-media { position: relative; }
+    .library-unavailable-media .library-preview-image { width: 100%; height: 100%; object-fit: contain; }
+    .library-unavailable-media .library-media-empty { position: absolute; inset: 0; min-height: 0; background: rgba(242, 245, 249, .86); }
+    .library-media-empty strong { color: #415872; font-size: 13px; }
+    .library-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 8px; }
+    .content-badge-media { background: #e8f6f2; color: #28745f; }
+    .library-engagement { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; color: #728198; font-size: 11px; }
+    .content-date { white-space: nowrap; }
+    .library-identity { display: flex; min-width: 0; align-items: center; gap: 8px; }
+    .library-avatar { width: 28px; height: 28px; flex: 0 0 28px; border: 1px solid #dbe6f1; border-radius: 50%; object-fit: cover; background: #e9f1f8; }
+    .library-avatar-fallback { display: grid; place-items: center; color: #315a7d; font-size: 10px; font-weight: 800; }
+    .library-profile-name { overflow: hidden; color: #435b74; text-overflow: ellipsis; white-space: nowrap; }
+    .library-original-post { margin-top: 10px; padding: 10px; border: 1px solid #e8edf3; border-radius: 9px; background: #f9fbfd; }
+    .library-original-post strong { display: block; margin-bottom: 4px; color: #62748a; font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+    .library-original-post p { margin: 0; color: #4b5e75; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .library-actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; margin-top: 12px; }
+    .library-actions a { color: #1769ce; font-size: 12px; font-weight: 700; text-decoration: none; }
+    .library-actions a:hover { text-decoration: underline; }
+    .library-note { margin: 14px 0 0; }
+    @media (max-width: 1020px) { .library-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    @media (max-width: 620px) { .library-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } .library-filters label:first-child { grid-column: 1 / -1; } }
+  </style>
+</head>
+<body class="library-page">
+  <header class="topbar">
+    <a class="brand" href="/">LinkedIn Activity Analyzer</a>
+    <nav aria-label="Main navigation">
+      <a href="/">Analyzer</a><a href="/saved-profiles">Saved Profiles</a>
+      <a href="/connections">Connections</a><a href="/analytics">Analytics</a>
+      <a class="active" href="/content-library" aria-current="page">Content Library</a>
+    </nav>
+  </header>
+
+  <main class="page-shell">
+    <section class="page-heading">
+      <div class="library-intro"><p class="eyebrow">STORED ACTIVITY</p><h1>Content library</h1>
+        <p class="muted">Search and browse posts, videos, and other activities saved by your analyses.</p></div>
+      <span id="contentCount" class="library-count" aria-live="polite">Loading…</span>
+    </section>
+
+    <div id="libraryStatus" class="notice library-status" role="status" aria-live="polite">Loading stored content…</div>
+
+    <section class="panel" aria-label="Content filters">
+      <div class="section-heading"><div><p class="eyebrow">YOUR STORED RECORDS</p><h2>Posts, videos and activity</h2></div><span id="selectedProfileLabel" class="muted">All profiles</span></div>
+      <div class="content-type-tabs" role="group" aria-label="Filter by media format or activity action">
+        <button class="content-type-tab" type="button" data-kind="" aria-pressed="true">All Content</button>
+        <button class="content-type-tab" type="button" data-kind="video" aria-pressed="false">Videos</button>
+        <button class="content-type-tab" type="button" data-kind="photo" aria-pressed="false">Photos</button>
+        <button class="content-type-tab" type="button" data-kind="post" aria-pressed="false">Posts</button>
+        <button class="content-type-tab" type="button" data-kind="like" aria-pressed="false">Likes / Reactions</button>
+        <button class="content-type-tab" type="button" data-kind="comment" aria-pressed="false">Comments</button>
+        <button class="content-type-tab" type="button" data-kind="repost" aria-pressed="false">Reposts / Shares</button>
+      </div>
+      <div class="filters library-filters">
+        <label><span>Search</span><input id="contentSearch" type="search" placeholder="Text, author or content"></label>
+        <label><span>Profile</span><select id="contentProfile"><option value="">All profiles</option></select></label>
+        <label><span>From</span><input id="contentFrom" type="date"></label>
+        <label><span>To</span><input id="contentTo" type="date"></label>
+        <label><span>Sort</span><select id="contentSort"><option value="newest">Newest first</option><option value="oldest">Oldest first</option></select></label>
+        <button id="applyFilters" class="button" type="button">Apply</button>
+      </div>
+      <div id="contentGrid" class="content-grid" aria-live="polite"><p class="empty">Loading stored content…</p></div>
+      <div class="pager"><span id="pageLabel"></span><button id="previousPage" class="button button-light" type="button">Previous</button><button id="nextPage" class="button button-light" type="button">Next</button></div>
+      <p class="muted library-note">Photos and videos filter by attached media; posts, likes, comments, and shares filter by action. A photo or video can also be part of a like or share, so those tabs can overlap. Only records currently stored in MongoDB are shown. Inline playback needs an accessible supported media URL or an eligible official LinkedIn embed; the original post link remains available as a fallback.</p>
+    </section>
+    <footer>Content shown here comes from stored analysis records. This page does not start a new LinkedIn extraction.</footer>
+  </main>
+  <script src="/js/content-library.js" defer></script>
+</body>
+</html>

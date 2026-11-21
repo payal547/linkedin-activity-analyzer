@@ -124,6 +124,10 @@ def handle_500(e):
 def home():
     return send_from_directory(FRONTEND_DIR, "index.html")
 
+@app.route("/saved-profiles")
+def saved_profiles():
+    return send_from_directory(FRONTEND_DIR, "index.html")
+
 
 @app.route("/login")
 def login():
@@ -141,6 +145,14 @@ def activity_filter():
 def dashboard():
     return send_from_directory(FRONTEND_DIR / "pages", "dashboard.html")
 
+@app.route("/analytics")
+def analytics_dashboard():
+    return send_from_directory(FRONTEND_DIR / "pages", "analytics.html")
+
+@app.route("/content-library")
+def content_library():
+    return send_from_directory(FRONTEND_DIR / "pages", "content-library.html")
+
 @app.route("/friend")
 def friend():
     return send_from_directory(FRONTEND_DIR / "pages", "friend.html")
@@ -154,5 +166,8 @@ if __name__ == "__main__":
         host=os.getenv("HOST", "127.0.0.1"),
         port=int(os.getenv("PORT", 5000)),
         debug=True,
-        reloader_type="stat"
+        # Werkzeug's Windows reloader can close the listening socket while
+        # serve_forever is polling it, producing WinError 10038 on restart.
+        # Keep the debugger, but avoid the extra reloader process/thread.
+        use_reloader=False
     )
