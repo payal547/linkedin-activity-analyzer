@@ -154,7 +154,8 @@ class TestFeatureImprovements(unittest.TestCase):
                 "status": 200,
                 "html": mock_html,
                 "title": "This profile is private | LinkedIn",
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "reached_end_of_feed": True
             }
         }
         with patch.dict("linkedin.playwright_service._PROFILE_CACHE", cache_data, clear=True):
@@ -195,7 +196,8 @@ class TestFeatureImprovements(unittest.TestCase):
                 "status": 200,
                 "html": mock_html,
                 "title": "Dr. Neel Mani | LinkedIn",
-                "timestamp": time.time()
+                "timestamp": time.time(),
+                "reached_end_of_feed": True
             }
         }
         with patch.dict("linkedin.playwright_service._PROFILE_CACHE", cache_data, clear=True):

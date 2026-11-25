@@ -379,6 +379,17 @@ class TestWorkflowPlaywright(unittest.TestCase):
         except ImportError:
             self.skipTest("Playwright not installed in environment")
 
+        # The name shown on the filter page comes from saved connections; seed it here
+        # instead of relying on data left by an earlier test.
+        from services.connections_storage import save_connection
+        save_connection({
+            "id": "conn_pragyanandsaho",
+            "name": "Pragyanand Sahoo",
+            "profile_url": "https://www.linkedin.com/in/pragyanandsaho",
+            "headline": "Researcher at SRHU",
+            "source": "imported"
+        })
+
         base_url = f"http://127.0.0.1:{self.port}"
 
         with sync_playwright() as p:
@@ -401,7 +412,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
             page.click("#analyzeProfileBtn")
             page.wait_for_selector("#urlErrorMsg")
             self.assertTrue(page.locator("#urlErrorMsg").is_visible())
-            self.assertIn("valid LinkedIn profile URL", page.text_content("#urlErrorMsg"))
+            self.assertIn("valid LinkedIn member profile URL", page.text_content("#urlErrorMsg"))
 
             # 3. Step 2: Enter Valid Profile URL
             page.fill("#profileUrlInput", "https://www.linkedin.com/in/pragyanandsaho")
@@ -564,7 +575,7 @@ class TestWorkflowPlaywright(unittest.TestCase):
             page = context.new_page()
 
             # 1. Open Website
-            page.goto(f"{base_url}/")
+            page.goto(f"{base_url}/saved-profiles")
 
             # 2. Wait for Saved Profiles section to render
             page.wait_for_selector("#savedProfilesSection", state="visible", timeout=6000)
@@ -592,12 +603,16 @@ class TestWorkflowPlaywright(unittest.TestCase):
             self.assertIn("Pragyanand Sahoo", target_name)
 
             # 7. Go back to main page
-            page.goto(f"{base_url}/")
+            page.goto(f"{base_url}/saved-profiles")
             page.wait_for_selector("#savedProfilesSection", state="visible", timeout=6000)
 
             # 8. Remove Payal Pal
             payal_card = page.locator(".saved-profile-card:has-text('Payal Pal')")
             payal_card.locator(".btn-remove-profile").click()
+
+            # Deletion is confirmed in the in-page modal, not a browser dialog
+            page.wait_for_selector("#deleteProfileModal", state="visible", timeout=6000)
+            page.click("#confirmDeleteBtn")
 
             # Wait for Payal Pal to disappear
             page.wait_for_timeout(1000)
@@ -619,6 +634,57 @@ class TestWorkflowPlaywright(unittest.TestCase):
             pass
 
 
+
+    def test_dashboard_renders_analysis_with_requested_date_range(self):
+        """
+        Regression: renderAnalysisResults called an undefined formatDate() whenever the
+        analysis had a requested start date, so stats and the feed stayed empty.
+        """
+        try:
+            from playwright.sync_api import sync_playwright
+        except ImportError:
+            self.skipTest("Playwright not installed in environment")
+        from services.analysis_storage import save_latest_analysis, clear_latest_analysis
+
+        url = "https://www.linkedin.com/in/range-render-test/"
+        rows = [
+            {"id": "rr_1", "type": "post", "date": "2026-10-05", "text": "First dated post", "likes": 3},
+            {"id": "rr_2", "type": "comment", "date": "2026-10-20", "text": "A dated comment", "comment_text": "Nice"},
+        ]
+        result = {
+            "subject_name": "Range Render", "subject_url": url, "headline": "Tester",
+            "total_activities": 2, "posts_count": 1, "comments_count": 1, "likes_count": 0, "shares_count": 0,
+            "videos_count": 0, "by_type": {"post": 1, "comment": 1},
+            "date_range": {"start": "2026-10-05", "end": "2026-10-20"},
+            "requested_date_range": {"start": "2026-10-01", "end": "2026-10-31"},
+            "status_type": "SUCCESS_WITH_ACTIVITIES", "retrieval_completeness": "COMPLETE",
+            "is_multi_profile": False, "profiles_count": 1, "activities": rows,
+        }
+        save_latest_analysis(result)
+        active_filter = {"subject_name": "Range Render", "subject_url": url, "startDate": "2026-10-01",
+                         "endDate": "2026-10-31", "activities": ["all"]}
+
+        base_url = f"http://127.0.0.1:{self.port}"
+        page_errors = []
+        try:
+            with sync_playwright() as p:
+                try:
+                    browser = p.chromium.launch(headless=True)
+                except Exception as e:
+                    self.skipTest(f"Chromium browser not available: {e}")
+                page = browser.new_page()
+                page.on("pageerror", lambda err: page_errors.append(str(err)))
+                page.on("console", lambda msg: page_errors.append(msg.text) if "is not defined" in msg.text else None)
+                page.goto(f"{base_url}/login")
+                page.evaluate("(f) => localStorage.setItem('activityFilter', JSON.stringify(f))", active_filter)
+                page.goto(f"{base_url}/dashboard", wait_until="networkidle")
+                page.wait_for_function("document.getElementById('totalActivities').textContent.trim() === '2'", timeout=8000)
+                self.assertIn("01/10/2026", page.text_content("#scannedRangeLabel"))
+                self.assertEqual(page.locator(".feed-post-card").count(), 2)
+                browser.close()
+        finally:
+            clear_latest_analysis()
+        self.assertEqual(page_errors, [])
 
     def test_dashboard_renders_preserved_history_metrics_on_http_999(self):
         """

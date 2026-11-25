@@ -5,449 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LinkedIn Activity Analyzer - Filter Criteria</title>
 
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
-            min-height: 100vh;
-            background: linear-gradient(145deg, #eef5fb 0%, #f8fafc 48%, #eef2ff 100%);
-            color: #172033;
-        }
-
-        .header {
-            background: linear-gradient(110deg, #084f96, #0a66c2 58%, #1684cb);
-            color: white;
-            padding: 16px 40px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header h1 {
-            font-size: 20px;
-            font-weight: 700;
-        }
-
-        .header a {
-            color: white;
-            text-decoration: none;
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        .header a:hover {
-            text-decoration: underline;
-        }
-
-        .container {
-            width: min(94%, 900px);
-            margin: 38px auto;
-        }
-
-        .card {
-            background: white;
-            padding: 34px 38px;
-            border-radius: 18px;
-            box-shadow: 0 18px 50px rgba(15, 39, 72, 0.10);
-            border: 1px solid rgba(203, 213, 225, 0.8);
-        }
-
-        h2 {
-            font-size: 22px;
-            margin-bottom: 6px;
-            color: #111;
-        }
-
-        .subtitle {
-            color: #666;
-            font-size: 14px;
-            margin-bottom: 22px;
-            line-height: 1.5;
-        }
-
-        /* Selected LinkedIn Profile Card */
-        .selected-profile-box {
-            background: #f8fafc;
-            border: 1px solid #cbd5e1;
-            padding: 18px 20px;
-            border-radius: 10px;
-            margin-bottom: 26px;
-        }
-
-        .selected-profile-box h3 {
-            font-size: 15px;
-            color: #0a66c2;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .profile-fields-grid {
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 10px;
-            font-size: 14px;
-        }
-
-        .profile-field-row {
-            display: flex;
-            gap: 8px;
-            align-items: baseline;
-            flex-wrap: wrap;
-        }
-
-        .field-label {
-            font-weight: 700;
-            color: #334155;
-            min-width: 105px;
-        }
-
-        .field-value {
-            color: #0f172a;
-            font-weight: 500;
-            word-break: break-all;
-        }
-
-        .field-value a {
-            color: #0a66c2;
-            text-decoration: none;
-            font-weight: 600;
-        }
-
-        .field-value a:hover {
-            text-decoration: underline;
-        }
-
-        .badge-source {
-            font-size: 11px;
-            font-weight: 700;
-            padding: 3px 8px;
-            border-radius: 12px;
-            text-transform: uppercase;
-            letter-spacing: 0.3px;
-        }
-
-        .badge-real {
-            background: #e7f5e9;
-            color: #1b873f;
-        }
-
-        .badge-imported {
-            background: #ede9fe;
-            color: #6b21a8;
-        }
-
-        .section {
-            margin-bottom: 26px;
-            padding: 20px;
-            border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            background: #fbfdff;
-        }
-
-        .section h3 {
-            font-size: 16px;
-            margin-bottom: 12px;
-            color: #1e293b;
-            font-weight: 700;
-        }
-
-        .date-presets {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
-            gap: 8px;
-            margin-bottom: 14px;
-        }
-
-        .range-helper {
-            color: #64748b;
-            font-size: 12px;
-            line-height: 1.5;
-            margin: -3px 0 13px;
-        }
-
-        .preset-btn {
-            padding: 8px 12px;
-            border: 1px solid #cbd5e1;
-            background: #f8fafc;
-            border-radius: 6px;
-            font-size: 13px;
-            color: #475569;
-            cursor: pointer;
-            text-align: center;
-            font-weight: 500;
-            transition: all 0.15s ease;
-        }
-
-        .preset-btn.active, .preset-btn:hover {
-            background: #0a66c2;
-            color: white;
-            border-color: #0a66c2;
-        }
-
-        .date-inputs-row {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 16px;
-        }
-
-        .date-field {
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .date-field label {
-            font-size: 13px;
-            font-weight: 600;
-            color: #475569;
-        }
-
-        input[type="date"] {
-            width: 100%;
-            padding: 10px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-size: 14px;
-            color: #1e293b;
-            background: white;
-        }
-
-        input[type="date"]:focus {
-            outline: none;
-            border-color: #0a66c2;
-            box-shadow: 0 0 0 3px rgba(10, 102, 194, 0.15);
-        }
-
-        .date-input-container {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .date-text-input {
-            width: 100%;
-            padding: 10px 42px 10px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            font-size: 14px;
-            color: #1e293b;
-            background: white;
-            font-family: inherit;
-        }
-
-        .date-text-input:focus {
-            outline: none;
-            border-color: #0a66c2;
-            box-shadow: 0 0 0 3px rgba(10, 102, 194, 0.15);
-        }
-
-        .calendar-btn {
-            position: absolute;
-            right: 6px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 6px 8px;
-            font-size: 16px;
-            line-height: 1;
-            color: #475569;
-            border-radius: 4px;
-            transition: background 0.15s ease, color 0.15s ease;
-        }
-
-        .calendar-btn:hover {
-            background: #f1f5f9;
-            color: #0a66c2;
-        }
-
-        .hidden-native-picker {
-            position: absolute;
-            opacity: 0;
-            width: 0;
-            height: 0;
-            pointer-events: none;
-            border: 0;
-            padding: 0;
-            margin: 0;
-        }
-
-        /* Activity Types */
-        .activities-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px;
-        }
-
-        .activity-option {
-            padding: 12px 14px;
-            border: 1px solid #cbd5e1;
-            border-radius: 8px;
-            cursor: pointer;
-            font-size: 14px;
-            display: flex;
-            align-items: center;
-            background: white;
-            transition: border-color 0.15s ease, background 0.15s ease;
-            user-select: none;
-        }
-
-        .activity-option:hover {
-            border-color: #0a66c2;
-            background: #f8fafc;
-        }
-
-        .activity-option input {
-            margin-right: 10px;
-            width: 17px;
-            height: 17px;
-            accent-color: #0a66c2;
-            cursor: pointer;
-        }
-
-        .activity-option.all-option {
-            grid-column: 1 / -1;
-            background: #f1f5f9;
-            font-weight: 700;
-            border-color: #94a3b8;
-        }
-
-        .continue-btn {
-            width: 100%;
-            padding: 15px;
-            background: #0a66c2;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            margin-top: 15px;
-            transition: background 0.15s ease;
-        }
-
-        .continue-btn:hover {
-            background: #004182;
-            box-shadow: 0 8px 18px rgba(10, 102, 194, 0.2);
-        }
-
-        .continue-btn:disabled {
-            background: #a0c3e8;
-            cursor: not-allowed;
-        }
-
-        .back-link {
-            display: inline-block;
-            margin-top: 18px;
-            color: #64748b;
-            text-decoration: none;
-            font-size: 14px;
-        }
-
-        .back-link:hover {
-            color: #0a66c2;
-            text-decoration: underline;
-        }
-
-        .error {
-            color: #c81e1e;
-            background: #fde8e8;
-            padding: 11px 14px;
-            border-radius: 6px;
-            margin-top: 14px;
-            font-size: 13px;
-            display: none;
-        }
-
-        /* YouTube-Style Live Top Progress Bar */
-        .yt-progress-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 3px;
-            width: 0%;
-            background: #ff0000;
-            box-shadow: 0 0 10px rgba(255, 0, 0, 0.85), 0 0 5px rgba(255, 0, 0, 0.5);
-            z-index: 999999;
-            transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
-            pointer-events: none;
-        }
-
-        .yt-progress-bar.indeterminate {
-            animation: ytShimmer 1.8s infinite ease-in-out;
-        }
-
-        @keyframes ytShimmer {
-            0% { opacity: 0.65; filter: brightness(1); }
-            50% { opacity: 1.0; filter: brightness(1.35); }
-            100% { opacity: 0.65; filter: brightness(1); }
-        }
-
-        .yt-progress-bar.error-bar {
-            background: #dc2626 !important;
-            box-shadow: 0 0 10px rgba(220, 38, 38, 0.9) !important;
-        }
-
-        .yt-progress-chip {
-            position: fixed;
-            top: 12px;
-            right: 20px;
-            z-index: 999998;
-            background: rgba(15, 23, 42, 0.94);
-            backdrop-filter: blur(8px);
-            color: #ffffff;
-            padding: 7px 16px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            transition: opacity 0.3s ease;
-        }
-
-        .yt-spinner {
-            width: 13px;
-            height: 13px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #ff0000;
-            border-radius: 50%;
-            animation: ytSpin 0.7s linear infinite;
-            flex-shrink: 0;
-        }
-
-        @keyframes ytSpin {
-            to { transform: rotate(360deg); }
-        }
-
-        .yt-chip-profile {
-            background: rgba(255, 255, 255, 0.18);
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 11px;
-            color: #f1f5f9;
-        }
-
-        @media (max-width: 600px) {
-            .container { width: calc(100% - 24px); margin: 18px auto; }
-            .card { padding: 22px 18px; }
-            .header { padding: 14px 18px; }
-            .section { padding: 16px 13px; }
-            .date-inputs-row, .activities-grid {
-                grid-template-columns: 1fr;
-            }
-        }
-    </style>
     <link rel="stylesheet" href="/css/style.css">
-    <link rel="stylesheet" href="/css/site-theme.css">
+    <script src="/js/app.js" defer></script>
 </head>
 <body class="app-page activity-page">
 
@@ -459,61 +18,65 @@
         <span class="yt-chip-profile" id="ytChipProfile" style="display: none;"></span>
     </div>
 
-<header class="header">
-    <h1>LinkedIn Activity Analyzer</h1>
+<header class="topnav">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">in</span><span>Activity Analyzer</span></a>
     <nav aria-label="Main navigation">
-        <a href="/">Analyzer</a><a href="/saved-profiles">Saved Profiles</a>
-        <a href="/analytics">Analytics</a><a href="/content-library">Content Library</a>
+        <a href="/">Analyzer</a>
+        <a href="/saved-profiles">Saved profiles</a>
+        <a href="/analytics">Analytics</a>
+        <a href="/content-library">Library</a>
         <a href="/connections">Connections</a>
     </nav>
 </header>
 
-<div class="container">
-    <div class="card">
-        <h2>Date & Activity Filter</h2>
-        <p class="subtitle">
-            Configure the date range and activity categories to analyze for this profile.
-        </p>
+<main class="page">
+    <div class="page-head">
+        <div>
+            <a href="/" class="back-link">← Different profile</a>
+            <h1 style="margin-top:8px;">Choose what to analyze</h1>
+            <p>Pick a date range and the kinds of activity to include.</p>
+        </div>
+    </div>
 
+    <div class="filter-layout">
         <!-- Selected LinkedIn Profile -->
-        <div class="selected-profile-box">
-            <h3>
-                <span>Selected LinkedIn Profile</span>
-                <span class="badge-source badge-real" id="sourceBadge">LinkedIn Profile</span>
-            </h3>
+        <aside class="selected-profile-box">
+            <img id="profilePhotoDisplay" class="selected-profile-photo" alt="" referrerpolicy="no-referrer" style="display:none;">
             <div class="profile-fields-grid">
-                <div class="profile-field-row">
-                    <span class="field-label">Profile Name:</span>
+                <div class="profile-field-row profile-field-name">
+                    <span class="field-label">Profile name</span>
                     <span class="field-value" id="profileNameDisplay">Loading...</span>
                     <!-- Hidden element for compatibility with test assertions -->
                     <span id="friendName" style="display:none;">Loading...</span>
                 </div>
-                <div class="profile-field-row">
-                    <span class="field-label">Profile URL:</span>
-                    <span class="field-value"><a id="profileUrlDisplay" href="#" target="_blank" rel="noopener noreferrer">Loading...</a></span>
-                </div>
-                <div class="profile-field-row">
-                    <span class="field-label">Headline:</span>
+                <div class="profile-field-row profile-field-headline">
+                    <span class="field-label">Headline</span>
                     <span class="field-value" id="profileHeadlineDisplay">Loading...</span>
                 </div>
+                <div class="profile-field-row profile-field-url">
+                    <span class="field-label">Profile URL</span>
+                    <span class="field-value"><a id="profileUrlDisplay" href="#" target="_blank" rel="noopener noreferrer">Loading...</a></span>
+                </div>
             </div>
-        </div>
+            <span class="badge-source badge-real" id="sourceBadge">LinkedIn Profile</span>
+        </aside>
 
+    <div class="card filter-card">
         <!-- 1. Date Range -->
         <div class="section">
-            <h3>Date Range</h3>
+            <h3>Date range</h3>
             <div class="date-presets">
-                <button type="button" class="preset-btn" onclick="applyDatePreset('all')">All Dates</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('all')">All dates</button>
                 <button type="button" class="preset-btn" onclick="applyDatePreset('today')">Today</button>
-                <button type="button" class="preset-btn" onclick="applyDatePreset('7days')">Last 7 Days</button>
-                <button type="button" class="preset-btn" onclick="applyDatePreset('10days')">Last 10 Days</button>
-                <button type="button" class="preset-btn active" onclick="applyDatePreset('30days')">Last 30 Days</button>
-                <button type="button" class="preset-btn" onclick="applyDatePreset('1year')">Last 1 Year</button>
-                <button type="button" class="preset-btn" onclick="applyDatePreset('2years')">Last 2 Years</button>
-                <button type="button" class="preset-btn" onclick="applyDatePreset('older1year')">1-2 Years Ago</button>
-                <button type="button" class="preset-btn" id="customPresetBtn" onclick="applyDatePreset('custom')">Custom Range</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('7days')">7 days</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('10days')">10 days</button>
+                <button type="button" class="preset-btn active" onclick="applyDatePreset('30days')">30 days</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('1year')">1 year</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('2years')">2 years</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('older1year')">1–2 years ago</button>
+                <button type="button" class="preset-btn" id="customPresetBtn" onclick="applyDatePreset('custom')">Custom</button>
             </div>
-            <p class="range-helper">Choose any dates to inspect that part of the profile timeline. “Last 2 Years” matches LinkedIn's full history visibility.</p>
+            <p class="range-helper">LinkedIn shows up to 2 years of activity, so “2 years” covers the full visible history.</p>
 
             <!-- Radio option for compatibility with existing tests expecting input[value="30days"] -->
             <div style="display:none;">
@@ -549,44 +112,45 @@
 
         <!-- 2. Activity Type -->
         <div class="section">
-            <h3>Activity Type</h3>
+            <h3>Activity types</h3>
             <div class="activities-grid">
                 <label class="activity-option all-option">
                     <input type="checkbox" id="checkAllActivities" value="all" checked onchange="toggleAllActivities(this)">
-                    [ All ] Activity Types
+                    All activity
                 </label>
                 <label class="activity-option">
                     <input type="checkbox" class="activity-checkbox" value="posts" checked onchange="onSingleActivityChange()">
-                    [ Posts ] & Articles
+                    Posts &amp; articles
                 </label>
                 <label class="activity-option">
                     <input type="checkbox" class="activity-checkbox" value="comments" checked onchange="onSingleActivityChange()">
-                    [ Comments ]
+                    Comments
                 </label>
                 <label class="activity-option">
                     <input type="checkbox" class="activity-checkbox" value="likes" checked onchange="onSingleActivityChange()">
-                    [ Reactions/Likes ]
+                    Reactions
                 </label>
                 <label class="activity-option">
                     <input type="checkbox" class="activity-checkbox" value="shares" checked onchange="onSingleActivityChange()">
-                    [ Shares ]
+                    Reposts
                 </label>
                 <label class="activity-option">
                     <input type="checkbox" class="activity-checkbox" value="videos" checked onchange="onSingleActivityChange()">
-                    [ Videos ] & Media
+                    Videos &amp; media
                 </label>
             </div>
         </div>
 
         <p class="error" id="errorMessage"></p>
 
-        <button class="continue-btn" id="analyzeBtn" onclick="analyzeActivity()">
-            Analyze Activity →
-        </button>
-
-        <a href="/" class="back-link">← Enter a different profile URL</a>
+        <div class="filter-actions">
+            <button class="continue-btn" id="analyzeBtn" onclick="analyzeActivity()">
+                Analyze activity →
+            </button>
+        </div>
     </div>
-</div>
+    </div>
+</main>
 
 <script src="/js/activity.js"></script>
 </body>

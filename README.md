@@ -17,6 +17,19 @@ python backend/app.py
 
 Open `http://127.0.0.1:5000`. The redirect URI must also be registered in the LinkedIn developer app. LinkedIn controls which OAuth products and APIs an app can access; this app requests the OpenID Connect `openid profile email` scopes. For this single-process local app, access tokens stay in server memory and are cleared by restarting the server; production multi-process use should replace this store with a shared server-side session/token store.
 
+## Paste any LinkedIn link
+
+The landing page works out which profile a pasted link belongs to:
+
+| You paste | What happens |
+| --- | --- |
+| Profile link (`/in/username`, with tracking parameters, country subdomain or `/details/...`), mobile link (`/mwlite/in/...`), or a bare username | Used directly |
+| Post link (`/posts/username_...`) | The author is read from the link |
+| Feed/activity link (`/feed/update/urn:li:activity:...`), article (`/pulse/...`) or `lnkd.in` short link | Opened with your LinkedIn session to find the author |
+| Company, school, job, group, search or home-feed link | Rejected with an explanation |
+
+For a profile that is not already in your connections or saved profiles, the app opens it with your logged-in Chrome session (CDP on port 9222, or the saved session) and shows the person's real name, headline and photo before analysis. Without a session it falls back to the name in the URL and labels it "Name from URL (not verified)". Guest mode is never used for this lookup. Results are cached for 30 minutes.
+
 ## Analyze an activity CSV
 
 LinkedIn does not make every member's posts, comments, or connections available through OAuth. If activity API access is unavailable, go through the dashboard and upload a CSV with these columns:

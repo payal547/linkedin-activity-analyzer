@@ -35,23 +35,26 @@ def get_activities_for_subject(
     if status_out is None:
         status_out = {}
 
-    # 1. Check for user-imported data in session (offline CSV or ZIP export)
+    # 1. Check for user-imported data in session (offline CSV or ZIP export).
+    # Imported rows are matched by canonical profile slug only. Rows with no
+    # profile identity belong to the uploader's own export, so they are used
+    # only for a "self" analysis and never attributed to another profile.
     if session_activities:
-        s_name = (subject_name or "").strip().lower()
+        try:
+            from services.saved_profiles_storage import extract_slug as _slug_of
+        except ImportError:
+            from backend.services.saved_profiles_storage import extract_slug as _slug_of
         s_id = (subject_id or "").strip().lower()
-        s_url = (subject_url or "").strip().lower()
+        s_slug = _slug_of(subject_url or "") or ("" if s_id in ("", "self") else _slug_of(s_id))
+        is_self_request = not s_slug and s_id in ("", "self")
         matching = []
         for a in session_activities:
-            a_name = (a.get("subject_name") or "").strip().lower()
             a_id = (a.get("subject_id") or "").strip().lower()
-            a_url = (a.get("subject_url") or "").strip().lower()
-            if s_url and a_url and (s_url in a_url or a_url in s_url):
-                matching.append(a)
-            elif s_id and a_id and s_id == a_id:
-                matching.append(a)
-            elif s_name and a_name and s_name == a_name:
-                matching.append(a)
-            elif not a_name and not a_id and not a_url:
+            a_slug = _slug_of(a.get("subject_url") or "") or ("" if a_id in ("", "self") else _slug_of(a_id))
+            if s_slug and a_slug:
+                if s_slug == a_slug:
+                    matching.append(a)
+            elif is_self_request and not a_slug:
                 matching.append(a)
         if matching:
             status_out["status"] = f"Loaded {len(matching)} real activities from uploaded LinkedIn archive."

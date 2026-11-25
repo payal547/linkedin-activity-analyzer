@@ -112,10 +112,12 @@ def extract_slug(url_or_slug: str) -> str:
         return ""
     if cleaned.lower().startswith("http") or "linkedin.com" in cleaned.lower():
         return ""
-    sanitized = re.sub(r'[^a-zA-Z0-9_\-]', '', cleaned.lower())
-    if sanitized in ("", "in", "httpswwwlinkedincomin", "httpwwwlinkedincomin", "linkedincomin"):
+    raw = cleaned.strip("/").lower()
+    if not re.fullmatch(r'[a-z0-9_\-]+', raw):
         return ""
-    return sanitized
+    if raw in ("in", "http", "https", "www", "linkedin", "httpswwwlinkedincomin", "httpwwwlinkedincomin", "linkedincomin"):
+        return ""
+    return raw
 
 
 def _load_history_from_json() -> Dict[str, Any]:
@@ -343,7 +345,10 @@ def save_latest_analysis(analysis_data: Dict[str, Any]) -> None:
     def _filter_historical_if_needed(hist_dict: Dict[str, Any], profile_data: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         request_data = profile_data or analysis_data
         req_kinds = request_data.get("filtered_activity_types") or analysis_data.get("filtered_activity_types") or ["all"]
-        requested_range = request_data.get("requested_date_range") or request_data.get("date_range") or {}
+        # Only the bounds the user requested may filter history. date_range holds the
+        # dates of the activities found, which for a failed attempt is a single day and
+        # would hide the whole preserved history.
+        requested_range = request_data.get("requested_date_range") or {}
         req_start = requested_range.get("start")
         req_end = requested_range.get("end")
         if (req_kinds != ["all"] or req_start or req_end) and hist_dict and hist_dict.get("activities"):

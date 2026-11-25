@@ -111,7 +111,9 @@ class TestActivities(unittest.TestCase):
             self.assertEqual(act["type"], "post")
 
     def test_validate_profile_url_invalid(self):
-        res = self.client.post("/api/profile/validate-url", json={"url": "not-a-linkedin-url"})
+        # A bare word such as "not-a-linkedin-url" is a well-formed raw slug and is
+        # accepted by design, so use an input that is neither a slug nor a LinkedIn URL.
+        res = self.client.post("/api/profile/validate-url", json={"url": "https://example.com/not-a-linkedin-url"})
         self.assertEqual(res.status_code, 400)
         data = res.get_json()
         self.assertFalse(data.get("valid"))
@@ -123,7 +125,7 @@ class TestActivities(unittest.TestCase):
         data = res.get_json()
         self.assertTrue(data.get("valid"))
         self.assertEqual(data.get("name"), "Satyanadella")
-        self.assertEqual(data.get("profile_url"), "https://www.linkedin.com/in/satyanadella")
+        self.assertEqual(data.get("profile_url"), "https://www.linkedin.com/in/satyanadella/")
 
     def test_validate_profile_url_known_connection(self):
         res = self.client.post("/api/profile/validate-url", json={"url": "https://www.linkedin.com/in/pragyanandsaho"})

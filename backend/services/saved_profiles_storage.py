@@ -77,6 +77,10 @@ def _get_mongo_collection():
         return None, None
 
 
+# Strings that look like slugs but are fragments of a stripped root URL.
+_INVALID_RAW_SLUGS = {"in", "http", "https", "www", "linkedin", "httpswwwlinkedincomin", "httpwwwlinkedincomin", "linkedincomin"}
+
+
 def parse_linkedin_url(url: str) -> Tuple[bool, str, Optional[str], Optional[str]]:
     """
     Parses and validates a LinkedIn member profile URL.
@@ -132,10 +136,12 @@ def parse_linkedin_url(url: str) -> Tuple[bool, str, Optional[str], Optional[str
         if "linkedin.com" in lower_candidate:
             url_to_parse = "https://" + cleaned.lstrip("/")
         else:
-            # Check if this is a raw slug directly (e.g., "satyanadella", "akanksha-chauhan-5095b7266")
-            sanitized_slug = re.sub(r'[^a-zA-Z0-9_\-]', '', cleaned.lower())
-            if sanitized_slug and sanitized_slug not in ("", "in", "http", "https"):
-                canonical_slug = sanitized_slug
+            # Accept a raw slug only when the input already is one (e.g. "satyanadella",
+            # "akanksha-chauhan-5095b7266"). Inputs with dots, slashes or spaces are
+            # other websites or free text, not slugs, and must not be squashed into one.
+            raw = cleaned.strip("/").lower()
+            if re.fullmatch(r'[a-z0-9_\-]+', raw) and raw not in _INVALID_RAW_SLUGS:
+                canonical_slug = raw
                 canonical_url = f"https://www.linkedin.com/in/{canonical_slug}/"
                 return True, "", canonical_slug, canonical_url
             return False, "Invalid LinkedIn profile URL. Example: https://www.linkedin.com/in/username", None, None
@@ -208,13 +214,9 @@ def extract_slug(url: str) -> str:
             slug = match.group(1).rstrip('/').lower()
             if slug and slug != "in":
                 return slug
-        return ""
-    if cleaned.lower().startswith("http") or "linkedin.com" in cleaned.lower():
-        return ""
-    sanitized = re.sub(r'[^a-zA-Z0-9_\-]', '', cleaned.lower())
-    if sanitized in ("", "in", "httpswwwlinkedincomin", "httpwwwlinkedincomin", "linkedincomin"):
-        return ""
-    return sanitized
+    # parse_linkedin_url already accepts every well-formed raw slug; anything
+    # else is not a profile identity.
+    return ""
 
 
 def _load_profiles_from_json() -> List[Dict[str, Any]]:
