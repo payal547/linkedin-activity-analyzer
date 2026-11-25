@@ -12,7 +12,8 @@ import re
 import sys
 from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
+import urllib.parse
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +77,112 @@ def _get_mongo_collection():
         return None, None
 
 
+def parse_linkedin_url(url: str) -> Tuple[bool, str, Optional[str], Optional[str]]:
+    """
+    Parses and validates a LinkedIn member profile URL.
+    Handles:
+    - Short URLs (e.g. https://www.linkedin.com/in/username/)
+    - Subdomains (e.g. https://in.linkedin.com/in/username, uk.linkedin.com)
+    - URLs with or without scheme (http/https/none)
+    - URLs with long query parameters / tracking tags (?utm_source=...&utm_content=...)
+    - URL-encoded characters (e.g. %2D -> -)
+    - Extra trailing slashes, dots, whitespace
+    - Raw profile slugs (e.g. 'satyanadella')
+    
+    Rejects:
+    - Empty / whitespace inputs
+    - Non-member URLs: company pages (/company/...), school pages (/school/...),
+      post/activity URLs (/posts/..., /feed/..., /pulse/..., /learning/...),
+      search URLs (/search/...)
+    - Unrelated websites
+    - Incomplete profile URLs (/in/, /in)
+    
+    Returns:
+    (is_valid: bool, error_message: str, canonical_slug: Optional[str], canonical_url: Optional[str])
+    """
+    if not url or not str(url).strip():
+        return False, "Please enter a LinkedIn profile URL.", None, None
+
+    cleaned = str(url).strip()
+
+    # Pre-check: decode percent encoding safely
+    try:
+        decoded_candidate = urllib.parse.unquote(cleaned)
+    except Exception:
+        decoded_candidate = cleaned
+
+    lower_candidate = decoded_candidate.lower()
+
+    # Detect unsupported non-profile LinkedIn sections explicitly
+    if any(p in lower_candidate for p in ("linkedin.com/company", "/company/")):
+        return False, "Company pages (linkedin.com/company/...) cannot be analyzed as member profiles. Please provide an individual LinkedIn member profile URL (e.g., https://www.linkedin.com/in/username).", None, None
+    if any(p in lower_candidate for p in ("linkedin.com/school", "/school/")):
+        return False, "School pages (linkedin.com/school/...) cannot be analyzed as member profiles. Please provide an individual LinkedIn member profile URL (e.g., https://www.linkedin.com/in/username).", None, None
+    if any(p in lower_candidate for p in ("linkedin.com/posts/", "linkedin.com/feed/update/", "linkedin.com/pulse/", "/posts/", "/pulse/")):
+        return False, "Post, feed, and article URLs cannot be analyzed as member profiles. Please provide an individual member profile URL (e.g., https://www.linkedin.com/in/username).", None, None
+    if any(p in lower_candidate for p in ("linkedin.com/search", "/search/")):
+        return False, "Search URLs cannot be analyzed as member profiles. Please provide an individual member profile URL (e.g., https://www.linkedin.com/in/username).", None, None
+    if any(p in lower_candidate for p in ("linkedin.com/feed", "/feed")):
+        if "/in/" not in lower_candidate:
+            return False, "LinkedIn feed URLs cannot be analyzed as member profiles. Please provide an individual member profile URL (e.g., https://www.linkedin.com/in/username).", None, None
+
+    # Handle full or scheme-less URL
+    url_to_parse = cleaned
+    if not url_to_parse.startswith(("http://", "https://")):
+        if "linkedin.com" in lower_candidate:
+            url_to_parse = "https://" + cleaned.lstrip("/")
+        else:
+            # Check if this is a raw slug directly (e.g., "satyanadella", "akanksha-chauhan-5095b7266")
+            sanitized_slug = re.sub(r'[^a-zA-Z0-9_\-]', '', cleaned.lower())
+            if sanitized_slug and sanitized_slug not in ("", "in", "http", "https"):
+                canonical_slug = sanitized_slug
+                canonical_url = f"https://www.linkedin.com/in/{canonical_slug}/"
+                return True, "", canonical_slug, canonical_url
+            return False, "Invalid LinkedIn profile URL. Example: https://www.linkedin.com/in/username", None, None
+
+    try:
+        parsed = urllib.parse.urlsplit(url_to_parse)
+    except Exception:
+        return False, "Malformed LinkedIn URL.", None, None
+
+    hostname = (parsed.hostname or "").lower()
+    if not (hostname == "linkedin.com" or hostname.endswith(".linkedin.com")):
+        return False, "Invalid URL. Please enter a valid LinkedIn member profile URL (e.g., https://www.linkedin.com/in/username).", None, None
+
+    path = parsed.path or ""
+
+    # Check for /in/ section
+    match = re.search(r'(?:^|\/)in\/([a-zA-Z0-9_\-\%]+)', path, re.IGNORECASE)
+    if not match:
+        if path.rstrip('/') in ("/in", "") or path.endswith("/in"):
+            return False, "Incomplete LinkedIn profile URL. Must include a profile username or slug (e.g., https://www.linkedin.com/in/username).", None, None
+        return False, "Invalid LinkedIn profile URL. Example: https://www.linkedin.com/in/username", None, None
+
+    raw_slug = match.group(1).rstrip('/')
+    try:
+        unquoted_slug = urllib.parse.unquote(raw_slug).strip()
+    except Exception:
+        unquoted_slug = raw_slug.strip()
+
+    # Normalize slug: remove any residual punctuation and lowercase
+    sanitized_slug = re.sub(r'[^a-zA-Z0-9_\-]', '', unquoted_slug)
+    if not sanitized_slug or sanitized_slug.lower() in ("", "in"):
+        return False, "Incomplete LinkedIn profile URL. Must include a profile username or slug (e.g., https://www.linkedin.com/in/username).", None, None
+
+    canonical_slug = sanitized_slug.lower()
+    canonical_url = f"https://www.linkedin.com/in/{canonical_slug}/"
+
+    return True, "", canonical_slug, canonical_url
+
+
 def normalize_profile_url(url: str) -> str:
     """Normalizes a LinkedIn profile URL and returns https://www.linkedin.com/in/{slug}/."""
     if not url:
         return ""
-    cleaned = url.strip()
+    valid, _, _, canonical = parse_linkedin_url(str(url))
+    if valid and canonical:
+        return canonical
+    cleaned = str(url).strip()
     match = re.search(r'(?:https?:\/\/)?(?:[a-zA-Z0-9_\-\.]+\.)?linkedin\.com\/in\/([a-zA-Z0-9_\-\%]+)', cleaned, re.IGNORECASE)
     if match:
         slug = match.group(1).rstrip('/')
@@ -96,6 +198,9 @@ def extract_slug(url: str) -> str:
     """
     if not url:
         return ""
+    valid, _, slug, _ = parse_linkedin_url(str(url))
+    if valid and slug:
+        return slug
     cleaned = str(url).strip()
     if "linkedin.com/in" in cleaned.lower():
         match = re.search(r'(?:https?:\/\/)?(?:[a-zA-Z0-9_\-\.]+\.)?linkedin\.com\/in\/([a-zA-Z0-9_\-\%]+)', cleaned, re.IGNORECASE)
@@ -200,6 +305,10 @@ def save_target_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
     if not is_valid_picture and existing_profile and existing_profile.get("picture"):
         valid_picture_url = existing_profile.get("picture")
 
+    orig_url = profile_data.get("original_url") or (raw_url if raw_url and raw_url != norm_url else None)
+    verified_reg_date = profile_data.get("verified_registration_date")
+    reg_date_source = profile_data.get("registration_date_source")
+
     if existing_profile:
         saved_entry = dict(existing_profile)
         saved_entry["last_analyzed"] = now_iso
@@ -213,14 +322,22 @@ def save_target_profile(profile_data: Dict[str, Any]) -> Dict[str, Any]:
             saved_entry["picture"] = None
         saved_entry["profile_url"] = norm_url or saved_entry.get("profile_url")
         saved_entry["id"] = slug
+        if orig_url:
+            saved_entry["original_url"] = orig_url
+        if verified_reg_date:
+            saved_entry["verified_registration_date"] = verified_reg_date
+            saved_entry["registration_date_source"] = reg_date_source or "Official LinkedIn Data Export"
     else:
         saved_entry = {
             "id": slug,
             "profile_url": norm_url,
+            "original_url": orig_url or norm_url,
             "name": name,
             "headline": headline,
             "picture": valid_picture_url,
-            "last_analyzed": now_iso
+            "last_analyzed": now_iso,
+            "verified_registration_date": verified_reg_date,
+            "registration_date_source": reg_date_source if verified_reg_date else None
         }
 
     # 1. Primary write to MongoDB

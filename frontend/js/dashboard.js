@@ -538,35 +538,92 @@ function renderAnalysisResults(data) {
 
 
     const urlLinkEl = document.getElementById("subjectUrlLink");
-
+    const copyBtnEl = document.getElementById("copyProfileUrlBtn");
     if (urlLinkEl) {
-
         if (profileUrl) {
-
             urlLinkEl.textContent = profileUrl;
-
+            urlLinkEl.title = profileUrl;
             urlLinkEl.href = profileUrl;
-
-            urlLinkEl.style.display = "inline";
-
+            urlLinkEl.style.display = "inline-block";
+            if (copyBtnEl) copyBtnEl.style.display = "inline-flex";
         } else {
-
             urlLinkEl.style.display = "none";
-
+            if (copyBtnEl) copyBtnEl.style.display = "none";
         }
-
     }
 
-
-
     const badgeEl = document.getElementById("subjectSourceBadge");
-
     if (badgeEl) {
-
         badgeEl.className = "badge-source " + getBadgeClass(source);
-
         badgeEl.textContent = getBadgeLabel(source);
+    }
 
+    // Auth Required / Session State Alert Banner
+    const authBannerEl = document.getElementById("authRequiredBanner");
+    const authTextEl = document.getElementById("authRequiredText");
+    const topStatusType = data.status_type || (data.profile_results && data.profile_results[0] && data.profile_results[0].status_type) || "";
+    const topEmptyMsg = data.empty_message || data.retrieval_status || "";
+    if (authBannerEl && authTextEl) {
+        if (topStatusType === "AUTH_REQUIRED" || topStatusType === "SESSION_EXPIRED" || topStatusType === "AUTH_FAILED" || topEmptyMsg.toLowerCase().includes("remote-debugging-port")) {
+            if (topEmptyMsg) authTextEl.textContent = topEmptyMsg;
+            authBannerEl.style.display = "block";
+        } else {
+            authBannerEl.style.display = "none";
+        }
+    }
+
+    // Identity Verification Warning (Requirement 1)
+    const warningEl = document.getElementById("identityWarningBanner");
+    const warningTextEl = document.getElementById("identityWarningText");
+    const identityWarning = data.identity_warning || (data.profile_results && data.profile_results[0] && data.profile_results[0].identity_warning);
+    if (warningEl && warningTextEl) {
+        if (identityWarning || data.identity_verified === false) {
+            warningTextEl.textContent = identityWarning || "Warning: Extracted profile identity does not match requested profile.";
+            warningEl.style.display = "block";
+        } else {
+            warningEl.style.display = "none";
+        }
+    }
+
+    // Official LinkedIn Activity History Limits & Date Coverage (Requirements 2 & 3)
+    const scannedEl = document.getElementById("scannedRangeLabel");
+    const retrievedEl = document.getElementById("retrievedRangeLabel");
+    const regDateEl = document.getElementById("registrationDateLabel");
+    const regNoticeEl = document.getElementById("registrationDateNotice");
+
+    const reqRange = data.requested_date_range || (data.profile_results && data.profile_results[0] && data.profile_results[0].requested_date_range) || {};
+    const startStr = reqRange.start ? formatDate(reqRange.start) : "Any time";
+    const endStr = reqRange.end ? formatDate(reqRange.end) : "Present";
+    if (scannedEl) scannedEl.innerHTML = `<strong>Scanned Range:</strong> ${escapeHTML(startStr)} – ${escapeHTML(endStr)}`;
+
+    const earliestRetrieved = data.earliest_retrieved_activity_date || (data.profile_results && data.profile_results[0] && data.profile_results[0].earliest_retrieved_activity_date);
+    const latestRetrieved = data.latest_retrieved_activity_date || (data.profile_results && data.profile_results[0] && data.profile_results[0].latest_retrieved_activity_date);
+    if (retrievedEl) {
+        if (earliestRetrieved && latestRetrieved) {
+            retrievedEl.innerHTML = `<strong>Retrieved Range:</strong> ${escapeHTML(formatDate(earliestRetrieved))} – ${escapeHTML(formatDate(latestRetrieved))}`;
+        } else {
+            retrievedEl.innerHTML = `<strong>Retrieved Range:</strong> <em>No dated activities retrieved</em>`;
+        }
+    }
+
+    const verifiedReg = data.verified_registration_date || (data.profile_results && data.profile_results[0] && data.profile_results[0].verified_registration_date);
+    const regSource = data.registration_date_source || (data.profile_results && data.profile_results[0] && data.profile_results[0].registration_date_source);
+    if (regDateEl) {
+        if (verifiedReg) {
+            regDateEl.innerHTML = `<strong>Registration Date:</strong> <span style="color:#15803d; font-weight:700;">${escapeHTML(formatDate(verifiedReg))}</span> (${escapeHTML(regSource || "Verified Official Source")})`;
+        } else {
+            regDateEl.innerHTML = `<strong>Registration Date:</strong> <span style="color:#64748b;">Not available</span>`;
+        }
+    }
+
+    const regNote = data.registration_date_note || (data.profile_results && data.profile_results[0] && data.profile_results[0].registration_date_note);
+    if (regNoticeEl) {
+        if (regNote) {
+            regNoticeEl.textContent = regNote;
+            regNoticeEl.style.display = "block";
+        } else {
+            regNoticeEl.style.display = "none";
+        }
     }
 
 
@@ -1580,7 +1637,7 @@ function renderAnalysisResults(data) {
 
                 displayTitle = "LinkedIn Authentication Required";
 
-                descText = `No activity data available: Profile activity for <strong>${escapeHTML(subjectName)}</strong> is protected behind LinkedIn's authentication wall. An authenticated session or manual export is required.`;
+                descText = `<div style="margin-bottom:8px;">${escapeHTML(emptyTitle)}</div><div style="font-size:13px; color:#475569; margin-top:8px;">To connect, close open Chrome windows and launch: <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">backend\\scripts\\launch_chrome_with_debug.bat</code></div>`;
 
             } else if (statusType === "ACTIVITY_SECTION_UNAVAILABLE" || lowerTitle.includes("not accessible for this profile")) {
 
@@ -2343,7 +2400,18 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
         const isEmbed = videoUrl && (videoUrl.includes("youtube.com") || videoUrl.includes("youtu.be") || videoUrl.includes("vimeo.com"));
 
+        const resolveLinkedInEmbed = (url) => {
+            if (!url || typeof url !== "string") return "";
+            try {
+                const u = url.trim();
+                if (/linkedin\.com\/embed\/feed\/update\//i.test(u)) return u;
+                const m = u.match(/urn:li:(?:activity|ugcPost|share):(\d+)/i) || u.match(/activity-(\d+)/i);
+                if (m) return `https://www.linkedin.com/embed/feed/update/urn:li:activity:${m[1]}`;
+                return "";
+            } catch (_) { return ""; }
+        };
 
+        const linkedInEmbedUrl = resolveLinkedInEmbed(act.embed_src) || resolveLinkedInEmbed(postUrl) || resolveLinkedInEmbed(videoUrl);
 
         if (isDirectStream) {
 
@@ -2387,25 +2455,41 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
             `;
 
+        } else if (linkedInEmbedUrl) {
+
+            videoInner = `
+
+                <div class="feed-post-video-embed linkedin-video-embed" style="position:relative; width:100%; min-height:520px; overflow:hidden; border-radius:8px; background:#fff;">
+
+                    <iframe src="${escapeAttr(linkedInEmbedUrl)}" frameborder="0" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share" allowfullscreen style="width:100%; height:520px; border:0; border-radius:8px;"></iframe>
+
+                </div>
+
+            `;
+
         } else if (videoThumbnail && !isDashboardMediaKnownBroken(videoThumbnail)) {
 
             const watchLink = postUrl || videoUrl || "#";
 
             videoInner = `
 
-                <div class="feed-post-video-poster" onclick="${watchLink !== '#' ? `window.open('${escapeAttr(watchLink)}', '_blank', 'noopener,noreferrer')` : ''}">
+                <div class="feed-post-video-poster">
 
-                    <img src="${escapeAttr(videoThumbnail)}" alt="Video thumbnail" onerror="markDashboardImageFailed(this);">
+                    <a href="${escapeAttr(watchLink)}" target="_blank" rel="noopener noreferrer" style="display:block; position:relative; width:100%; height:100%; text-decoration:none;" title="Watch Video on LinkedIn">
 
-                    <div class="video-play-overlay">
+                        <img src="${escapeAttr(videoThumbnail)}" alt="Video thumbnail" onerror="markDashboardImageFailed(this);">
 
-                        <div class="video-play-button" title="Watch Video on LinkedIn">
+                        <div class="video-play-overlay">
 
-                            <svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff" style="margin-left:3px;"><polygon points="6,3 20,12 6,21"></polygon></svg>
+                            <div class="video-play-button" title="Watch Video on LinkedIn">
+
+                                <svg viewBox="0 0 24 24" width="30" height="30" fill="#ffffff" style="margin-left:3px;"><polygon points="6,3 20,12 6,21"></polygon></svg>
+
+                            </div>
 
                         </div>
 
-                    </div>
+                    </a>
 
                 </div>
 
@@ -2433,6 +2517,8 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
 
         const statusBadge = videoStatus ? `<span class="video-status-badge">${escapeHTML(videoStatus)}</span>` : "";
 
+        const externalWatchLink = postUrl && postUrl.startsWith("http") ? `<a href="${escapeAttr(postUrl)}" target="_blank" rel="noopener noreferrer" class="feed-video-watch-link" style="color:#0a66c2; font-weight:600; font-size:12px; text-decoration:none; margin-left:auto;">Watch on LinkedIn ↗</a>` : "";
+
 
 
         videoHTML = `
@@ -2446,6 +2532,8 @@ function createActivityPostCard(act, defaultSubjectName, isHistorical = false) {
                     <span class="video-type-pill">▶ VIDEO</span>
 
                     ${statusBadge}
+
+                    ${externalWatchLink}
 
                 </div>
 
@@ -3065,4 +3153,38 @@ function errorYouTubeProgressBar(msg = "Analysis failed") {
             }, 300);
         }
     }, 4000);
+}
+
+function copyDashboardProfileUrl() {
+    const urlLinkEl = document.getElementById("subjectUrlLink");
+    const url = urlLinkEl ? (urlLinkEl.href || urlLinkEl.textContent || "").trim() : "";
+    if (!url) return;
+    const btnText = document.getElementById("copyUrlBtnText");
+    const doCopy = () => {
+        if (btnText) {
+            const original = btnText.textContent;
+            btnText.textContent = "✓ Copied!";
+            setTimeout(() => { btnText.textContent = original; }, 2000);
+        }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(url).then(doCopy).catch(() => {
+            _fallbackCopyDashboard(url);
+            doCopy();
+        });
+    } else {
+        _fallbackCopyDashboard(url);
+        doCopy();
+    }
+}
+
+function _fallbackCopyDashboard(text) {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.style.position = "fixed";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand("copy"); } catch (_) {}
+    document.body.removeChild(ta);
 }

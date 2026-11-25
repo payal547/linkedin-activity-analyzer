@@ -18,7 +18,13 @@ if str(_BACKEND_DIR) not in sys.path:
 if str(_PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(_PROJECT_ROOT))
 
-from linkedin.playwright_service import is_cdp_available, validate_session_state
+from linkedin.playwright_service import (
+    is_cdp_available,
+    validate_session_state,
+    find_authenticated_cdp_context,
+    validate_cdp_session,
+    scrape_linkedin_profile_activities
+)
 from services.analysis_storage import save_profile_successful_analysis, load_profile_successful_analysis
 
 
@@ -133,6 +139,81 @@ class TestChromeCDPIntegration(unittest.TestCase):
         self.assertEqual(origins.get("act_live_1"), "live_retrieval")
         self.assertEqual(loaded.get("historical_count"), 1)
         self.assertEqual(loaded.get("live_count"), 1)
+
+    def test_find_authenticated_cdp_context_prioritizes_active_tab_and_cookie(self):
+        """Verify find_authenticated_cdp_context picks context with active LinkedIn tab and li_at cookie."""
+        mock_browser = MagicMock()
+        # Context 0: Unrelated tabs, no LinkedIn cookies
+        ctx0 = MagicMock()
+        p0 = MagicMock()
+        p0.url = "https://www.google.com/search?q=test"
+        ctx0.pages = [p0]
+        ctx0.cookies.return_value = []
+
+        # Context 1: Active LinkedIn tab and valid li_at cookie
+        ctx1 = MagicMock()
+        p1 = MagicMock()
+        p1.url = "https://www.linkedin.com/feed/"
+        ctx1.pages = [p1]
+        ctx1.cookies.return_value = [{"name": "li_at", "value": "valid_token", "expires": 9999999999}]
+
+        mock_browser.contexts = [ctx0, ctx1]
+
+        best_ctx, meta = find_authenticated_cdp_context(mock_browser)
+        self.assertIs(best_ctx, ctx1)
+        self.assertEqual(meta["context_index"], 1)
+        self.assertTrue(meta["has_active_tab"])
+        self.assertTrue(meta["has_li_at"])
+        self.assertEqual(meta["active_tab_url"], "https://www.linkedin.com/feed/")
+
+    def test_find_authenticated_cdp_context_ignores_login_authwall_tabs(self):
+        """Verify pages on login or authwall are not counted as active authenticated tabs."""
+        mock_browser = MagicMock()
+        ctx0 = MagicMock()
+        p_authwall = MagicMock()
+        p_authwall.url = "https://www.linkedin.com/authwall?trk=bf"
+        ctx0.pages = [p_authwall]
+        ctx0.cookies.return_value = []
+
+        mock_browser.contexts = [ctx0]
+
+        best_ctx, meta = find_authenticated_cdp_context(mock_browser)
+        self.assertIsNone(best_ctx)
+        self.assertFalse(meta["has_active_tab"])
+        self.assertFalse(meta["has_li_at"])
+
+    @patch("playwright.sync_api.sync_playwright")
+    @patch("linkedin.playwright_service.get_active_chrome_cdp_ws_url", return_value="ws://127.0.0.1:9222/devtools/browser/abc")
+    def test_validate_cdp_session_does_not_close_browser(self, mock_ws, mock_sp):
+        """validate_cdp_session must NOT call browser.close() so user Chrome is never terminated."""
+        mock_p_instance = MagicMock()
+        mock_sp.return_value.__enter__.return_value = mock_p_instance
+
+        mock_browser = MagicMock()
+        mock_p_instance.chromium.connect_over_cdp.return_value = mock_browser
+
+        ctx = MagicMock()
+        ctx.pages = [MagicMock(url="https://www.linkedin.com/feed/")]
+        ctx.cookies.return_value = [{"name": "li_at", "value": "token", "expires": 9999999999}]
+        mock_browser.contexts = [ctx]
+
+        status, is_valid, msg = validate_cdp_session(port=9222)
+        self.assertEqual(status, "VALID")
+        self.assertTrue(is_valid)
+        self.assertIn("Authenticated session confirmed active", msg)
+        # Critical assertion: browser.close() must NEVER be called on CDP connection
+        mock_browser.close.assert_not_called()
+
+    @patch("linkedin.playwright_service.validate_session_state", return_value=("MISSING", False, "Session missing"))
+    def test_scrape_fails_fast_when_unauthenticated_without_guest_fallback(self, mock_sess):
+        """When not authenticated, scrape_linkedin_profile_activities must NOT fall back to guest mode."""
+        res = scrape_linkedin_profile_activities("https://www.linkedin.com/in/test-slug", target_name="Test")
+        success, activities, msg = res[0], res[1], res[2]
+        self.assertFalse(success)
+        self.assertEqual(activities, [])
+        self.assertEqual(res.status_type, "AUTH_REQUIRED")
+        self.assertEqual(res.retrieval_completeness, "UNAVAILABLE")
+        self.assertIn("authentication is required", msg.lower())
 
 
 if __name__ == "__main__":

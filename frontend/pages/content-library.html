@@ -19,12 +19,26 @@
     .library-card .content-card-body { flex: 1; }
     .library-card .content-text { max-height: none; overflow-wrap: anywhere; }
     .library-media-empty, .library-media-error { display: grid; min-height: 130px; padding: 18px; place-content: center; gap: 6px; color: #687991; background: #f2f5f9; text-align: center; font-size: 12px; }
-    .library-unavailable-media { position: relative; }
-    .library-unavailable-media .library-preview-image { width: 100%; height: 100%; object-fit: contain; }
-    .library-unavailable-media .library-media-empty { position: absolute; inset: 0; min-height: 0; background: rgba(242, 245, 249, .86); }
+    .library-photo-wrap { cursor: pointer; position: relative; overflow: hidden; background: #0f172a; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
+    .library-photo { width: 100%; height: 100%; object-fit: contain; transition: transform .25s ease; }
+    .library-photo-wrap:hover .library-photo { transform: scale(1.03); }
+    .library-video-wrap { position: relative; overflow: hidden; background: #090e17; aspect-ratio: 16/9; display: flex; align-items: center; justify-content: center; }
+    .library-video-wrap.has-embed { aspect-ratio: auto; min-height: 520px; height: 520px; background: #fff; }
+    .library-video-embed { width: 100%; height: 520px; border: 0; border-radius: 8px; }
+    .library-video-wrap video { width: 100%; height: 100%; object-fit: contain; }
+    .library-preview-link { display: block; width: 100%; height: 100%; position: relative; text-decoration: none; }
+    .library-video-preview { cursor: pointer; }
+    .library-video-preview .library-preview-image { width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease, opacity .25s ease; }
+    .library-video-preview:hover .library-preview-image { transform: scale(1.03); opacity: 0.9; }
+    .library-video-play-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; pointer-events: none; background: rgba(9, 14, 23, .35); }
+    .library-play-btn { width: 52px; height: 52px; border-radius: 50%; background: rgba(23, 105, 210, .92); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 20px; padding-left: 4px; box-shadow: 0 4px 18px rgba(0, 0, 0, .45); transition: transform .2s ease, background .2s ease; }
+    .library-video-preview:hover .library-play-btn { transform: scale(1.1); background: #155cb0; }
+    .library-video-tag { padding: 3px 9px; border-radius: 6px; background: rgba(0, 0, 0, .75); color: #fff; font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .05em; }
     .library-media-empty strong { color: #415872; font-size: 13px; }
     .library-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 8px; }
     .content-badge-media { background: #e8f6f2; color: #28745f; }
+    .content-badge-photo { background: #e6f9f0; color: #057a55; border: 1px solid #bbf7d0; font-weight: 800; }
+    .content-badge-video { background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; font-weight: 800; }
     .library-engagement { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; color: #728198; font-size: 11px; }
     .content-date { white-space: nowrap; }
     .library-identity { display: flex; min-width: 0; align-items: center; gap: 8px; }
@@ -89,7 +103,7 @@
       </div>
       <div id="contentGrid" class="content-grid" aria-live="polite"><p class="empty">Loading stored content…</p></div>
       <div class="pager"><span id="pageLabel"></span><button id="previousPage" class="button button-light" type="button">Previous</button><button id="nextPage" class="button button-light" type="button">Next</button></div>
-      <p class="muted library-note">Photos and videos filter by attached media; posts, likes, comments, and shares filter by action. A photo or video can also be part of a like or share, so those tabs can overlap. For public posts, add LinkedIn’s official embed code on a video card to try inline playback. Protected posts may remain available only on LinkedIn.</p>
+      <p class="muted library-note">Click "Photos" to view records with verified photo media. Click "Videos" to view video activities with inline playback or thumbnail preview linking directly to the LinkedIn video. Use Posts, Likes, Comments, and Reposts to filter by activity action.</p>
     </section>
     <footer>Content shown here comes from stored analysis records. This page does not start a new LinkedIn extraction.</footer>
   </main>

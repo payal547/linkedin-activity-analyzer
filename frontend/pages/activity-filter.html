@@ -509,10 +509,11 @@
                 <button type="button" class="preset-btn" onclick="applyDatePreset('10days')">Last 10 Days</button>
                 <button type="button" class="preset-btn active" onclick="applyDatePreset('30days')">Last 30 Days</button>
                 <button type="button" class="preset-btn" onclick="applyDatePreset('1year')">Last 1 Year</button>
+                <button type="button" class="preset-btn" onclick="applyDatePreset('2years')">Last 2 Years</button>
                 <button type="button" class="preset-btn" onclick="applyDatePreset('older1year')">1-2 Years Ago</button>
                 <button type="button" class="preset-btn" id="customPresetBtn" onclick="applyDatePreset('custom')">Custom Range</button>
             </div>
-            <p class="range-helper">Choose any dates to inspect that part of the profile timeline. “1-2 Years Ago” is a quick way to find older activity.</p>
+            <p class="range-helper">Choose any dates to inspect that part of the profile timeline. “Last 2 Years” matches LinkedIn's full history visibility.</p>
 
             <!-- Radio option for compatibility with existing tests expecting input[value="30days"] -->
             <div style="display:none;">
@@ -521,6 +522,7 @@
                 <input type="radio" name="dateType" value="7days">
                 <input type="radio" name="dateType" value="10days">
                 <input type="radio" name="dateType" value="1year">
+                <input type="radio" name="dateType" value="2years">
                 <input type="radio" name="dateType" value="custom">
                 <input type="radio" name="dateType" value="range">
             </div>

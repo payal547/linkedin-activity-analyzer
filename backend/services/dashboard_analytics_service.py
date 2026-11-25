@@ -1,13 +1,18 @@
-"""Read-only aggregation of actual MongoDB records for analytics dashboards."""
+"""Read-only aggregation of stored records for analytics dashboards."""
 
 import hashlib
+import json
+import logging
 import re
 from collections import Counter, defaultdict
 from datetime import date, datetime
+from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from db.mongo import get_db, sanitize_doc
 from services.video_embeds_storage import canonical_linkedin_post_url, load_video_embed_map
+
+logger = logging.getLogger(__name__)
 
 
 def _slug(value: Any) -> str:
@@ -77,25 +82,64 @@ def _activity_type(row: Dict[str, Any]) -> str:
     return "other"
 
 
+def _is_static_image_url(url: str) -> bool:
+    clean = (url or "").strip().lower().split("?")[0]
+    return any(clean.endswith(ext) for ext in (".jpg", ".jpeg", ".png", ".webp", ".gif", ".svg", ".bmp")) or "dms/image" in clean or "feedshare-image" in clean or "feedshare-shrink" in clean
+
+
 def _is_video_metadata(row: Dict[str, Any]) -> bool:
-    status = str(row.get("video_status") or "").strip().lower()
-    explicit_video_flag = row.get("is_video")
-    if isinstance(explicit_video_flag, str):
-        explicit_video_flag = explicit_video_flag.strip().lower() in {"1", "true", "yes", "y"}
+    v_url = row.get("video_stream_url") or row.get("video_url")
+    if v_url and not _is_static_image_url(str(v_url)):
+        return True
+    if row.get("embed_src"):
+        return True
+    m_type = str(row.get("media_type") or row.get("video_mime_type") or "").strip().lower()
+    if m_type.startswith("video"):
+        return True
     has_video_action = any(
         _ACTIVITY_KIND_ALIASES.get(str(row.get(field) or "").strip().lower()) == "video"
         for field in ("action_type", "activity_type", "type")
     )
-    has_positive_video_status = status.startswith(("video detected", "video stream", "external video", "video found"))
-    return bool(
-        explicit_video_flag or row.get("video_stream_url") or row.get("video_url") or row.get("video_thumbnail") or
-        str(row.get("media_type") or row.get("video_mime_type") or "").lower().startswith("video") or
-        has_video_action or has_positive_video_status
-    )
+    if has_video_action:
+        return True
+    p_url = str(row.get("post_url") or row.get("original_post_url") or row.get("linkedin_post_url") or "").lower()
+    if any(vp in p_url for vp in ("/videos/", "urn:li:video:", "youtube.com", "youtu.be", "vimeo.com")):
+        return True
+    med_url = str(row.get("media_url") or "").lower()
+    if any(ext in med_url for ext in (".mp4", ".mov", ".webm", ".m4v", "videocdn", "/video/", "dms/video/")):
+        return True
+
+    explicit_video_flag = row.get("is_video")
+    if isinstance(explicit_video_flag, str):
+        explicit_video_flag = explicit_video_flag.strip().lower() in {"1", "true", "yes", "y"}
+    status = str(row.get("video_status") or "").strip().lower()
+    has_pos_status = bool(status and status != "no video" and status.startswith(("video stream", "external video", "video detected", "video found")))
+    if explicit_video_flag or has_pos_status:
+        return True
+    return False
 
 
 def _is_video(row: Dict[str, Any]) -> bool:
     return _is_video_metadata(row)
+
+
+def _has_accessible_image(row: Dict[str, Any]) -> bool:
+    for field in ("image_url", "photo_url", "media_url"):
+        val = row.get(field)
+        if isinstance(val, str) and val.strip().startswith(("http://", "https://")):
+            val_clean = val.strip().lower().split("?")[0]
+            if not any(val_clean.endswith(ext) for ext in (".mp4", ".mov", ".webm", ".m4v", ".ogg")):
+                return True
+    for field in ("images", "media_urls"):
+        items = row.get(field)
+        if isinstance(items, list) and items:
+            for item in items:
+                url = item if isinstance(item, str) else (item.get("url") or item.get("src") or item.get("media_url") if isinstance(item, dict) else "")
+                if url and str(url).strip().startswith(("http://", "https://")):
+                    url_clean = str(url).strip().lower().split("?")[0]
+                    if not any(url_clean.endswith(ext) for ext in (".mp4", ".mov", ".webm", ".m4v", ".ogg")):
+                        return True
+    return False
 
 
 def _is_photo(row: Dict[str, Any]) -> bool:
@@ -105,36 +149,80 @@ def _is_photo(row: Dict[str, Any]) -> bool:
     media_type = str(row.get("media_type") or "").strip().lower()
     if media_type in ("image", "photo", "photos", "picture"):
         return True
-    return bool(
-        row.get("media_url") or row.get("image_url") or row.get("photo_url") or
-        (isinstance(row.get("images"), list) and row.get("images")) or
-        (isinstance(row.get("media_urls"), list) and row.get("media_urls"))
-    )
+    return _has_accessible_image(row)
 
 
 def _records() -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    db = get_db()
-    profiles = list(db["saved_profiles"].find({}, {"_id": 0, "id": 1, "profile_url": 1, "name": 1, "headline": 1, "picture": 1}))
-    activity_projection = {
-        "id": 1, "type": 1, "action_type": 1, "activity_type": 1, "date": 1, "activity_date": 1,
-        "text": 1, "activity_text": 1, "comment_text": 1, "post_content": 1, "original_post_text": 1,
-        "post_author": 1, "original_post_author": 1, "post_author_photo": 1, "post_author_headline": 1,
-        "post_url": 1, "original_post_url": 1, "linkedin_post_url": 1, "embed_src": 1,
-        "video_stream_url": 1, "subject_id": 1, "subject_url": 1, "subject_name": 1,
-        "actor": 1, "is_own_post": 1, "reaction_type": 1, "likes": 1, "comments": 1, "shares": 1,
-        "is_video": 1, "video_url": 1, "video_thumbnail": 1, "video_status": 1, "video_mime_type": 1,
-        "media_type": 1, "media_url": 1, "media_urls": 1, "image_url": 1, "photo_url": 1, "images": 1,
-        "source": 1, "storage_origin": 1,
-    }
-    history_fields = {"_id": 0, "slug": 1, "subject_id": 1, "subject_url": 1, "subject_name": 1, "historical_analyzed_at": 1, "retrieval_completeness": 1, "date_range": 1, "total_activities": 1, "posts_count": 1, "videos_count": 1}
-    history_fields.update({f"activities.{field}": value for field, value in activity_projection.items()})
-    histories = list(db["profile_analysis_history"].find({}, history_fields))
-    runs = list(db["analysis_runs"].find({}, {"_id": 1, "profile_slugs": 1, "completed_at": 1, "started_at": 1, "status": 1, "requested_date_range": 1, "retrieval_completeness": 1, "total_activities": 1, "posts_count": 1, "videos_count": 1, "by_type": 1, "profile_summaries": 1}).sort("completed_at", -1))
-    activity_fields = {"_id": 0, **activity_projection}
-    activities = list(db["activities"].find({}, activity_fields))
-    import_fields = {"_id": 0, "import_id": 1, "created_at": 1}
-    import_fields.update({f"activities.{field}": value for field, value in activity_projection.items()})
-    imports = list(db["imported_activities"].find({}, import_fields))
+    profiles: List[Dict[str, Any]] = []
+    histories: List[Dict[str, Any]] = []
+    runs: List[Dict[str, Any]] = []
+    activities: List[Dict[str, Any]] = []
+    imports: List[Dict[str, Any]] = []
+    mongo_ok = False
+
+    try:
+        db = get_db()
+        profiles = list(db["saved_profiles"].find({}, {"_id": 0, "id": 1, "profile_url": 1, "name": 1, "headline": 1, "picture": 1}))
+        activity_projection = {
+            "id": 1, "type": 1, "action_type": 1, "activity_type": 1, "date": 1, "activity_date": 1,
+            "text": 1, "activity_text": 1, "comment_text": 1, "post_content": 1, "original_post_text": 1,
+            "post_author": 1, "original_post_author": 1, "post_author_photo": 1, "post_author_headline": 1,
+            "post_url": 1, "original_post_url": 1, "linkedin_post_url": 1, "embed_src": 1,
+            "video_stream_url": 1, "subject_id": 1, "subject_url": 1, "subject_name": 1,
+            "actor": 1, "is_own_post": 1, "reaction_type": 1, "likes": 1, "comments": 1, "shares": 1,
+            "is_video": 1, "video_url": 1, "video_thumbnail": 1, "video_status": 1, "video_mime_type": 1,
+            "media_type": 1, "media_url": 1, "media_urls": 1, "image_url": 1, "photo_url": 1, "images": 1,
+            "source": 1, "storage_origin": 1,
+        }
+        history_fields = {"_id": 0, "slug": 1, "subject_id": 1, "subject_url": 1, "subject_name": 1, "historical_analyzed_at": 1, "retrieval_completeness": 1, "date_range": 1, "total_activities": 1, "posts_count": 1, "videos_count": 1}
+        history_fields.update({f"activities.{field}": value for field, value in activity_projection.items()})
+        histories = list(db["profile_analysis_history"].find({}, history_fields))
+        runs = list(db["analysis_runs"].find({}, {"_id": 1, "profile_slugs": 1, "completed_at": 1, "started_at": 1, "status": 1, "requested_date_range": 1, "retrieval_completeness": 1, "total_activities": 1, "posts_count": 1, "videos_count": 1, "by_type": 1, "profile_summaries": 1}).sort("completed_at", -1))
+        activity_fields = {"_id": 0, **activity_projection}
+        activities = list(db["activities"].find({}, activity_fields))
+        import_fields = {"_id": 0, "import_id": 1, "created_at": 1}
+        import_fields.update({f"activities.{field}": value for field, value in activity_projection.items()})
+        imports = list(db["imported_activities"].find({}, import_fields))
+        mongo_ok = True
+    except Exception as e:
+        logger.warning("MongoDB _records query failed (%s); using local JSON fallback.", e)
+
+    # Fallback to local JSON files if MongoDB is unavailable or returned 0 records while JSON exists
+    if not mongo_ok or (not profiles and not histories):
+        data_dir = Path(__file__).resolve().parent.parent / "data"
+        prof_file = data_dir / "saved_target_profiles.json"
+        hist_file = data_dir / "profile_analysis_history.json"
+        act_file = data_dir / "activities.json"
+
+        if (not profiles or not mongo_ok) and prof_file.exists():
+            try:
+                with open(prof_file, "r", encoding="utf-8") as f:
+                    p_data = json.load(f)
+                    if isinstance(p_data, list):
+                        profiles = p_data
+            except Exception as e:
+                logger.warning("Failed loading JSON saved_target_profiles: %s", e)
+
+        if (not histories or not mongo_ok) and hist_file.exists():
+            try:
+                with open(hist_file, "r", encoding="utf-8") as f:
+                    h_data = json.load(f)
+                    if isinstance(h_data, dict):
+                        histories = [{"slug": slug, **val} for slug, val in h_data.items() if isinstance(val, dict)]
+                    elif isinstance(h_data, list):
+                        histories = h_data
+            except Exception as e:
+                logger.warning("Failed loading JSON profile_analysis_history: %s", e)
+
+        if (not activities or not mongo_ok) and act_file.exists():
+            try:
+                with open(act_file, "r", encoding="utf-8") as f:
+                    a_data = json.load(f)
+                    if isinstance(a_data, list):
+                        activities = a_data
+            except Exception as e:
+                logger.warning("Failed loading JSON activities: %s", e)
+
     return tuple(sanitize_doc(items) for items in (profiles, histories, runs, activities, imports))
 
 
@@ -320,10 +408,7 @@ def get_overview() -> Dict[str, Any]:
 
 
 def list_profiles(search: str = "", sort: str = "name", order: str = "asc", page: int = 1, per_page: int = 20) -> Dict[str, Any]:
-    db = get_db()
-    profiles = list(db["saved_profiles"].find({}, {"_id": 0, "id": 1, "profile_url": 1, "name": 1, "headline": 1, "picture": 1}))
-    histories = list(db["profile_analysis_history"].find({}, {"_id": 0, "slug": 1, "subject_id": 1, "subject_url": 1, "subject_name": 1, "historical_analyzed_at": 1, "retrieval_completeness": 1, "date_range": 1, "activities": 1}))
-    runs = list(db["analysis_runs"].find({}, {"_id": 1, "profile_slugs": 1, "completed_at": 1, "started_at": 1}))
+    profiles, histories, runs, activities, imports = _records()
     rows = _profile_summaries(profiles, histories, runs, None)
     query = search.strip().lower()
     if query:
@@ -339,19 +424,47 @@ def list_profiles(search: str = "", sort: str = "name", order: str = "asc", page
 
 def list_profile_options() -> List[Dict[str, Any]]:
     """Small profile metadata payload for filters; does not load activity history."""
-    rows = get_db()["saved_profiles"].find({}, {"_id": 0, "id": 1, "profile_url": 1, "name": 1}).sort("name", 1)
-    return [{"id": _profile_slug(row), "name": row.get("name") or _profile_slug(row), "profile_url": row.get("profile_url")} for row in rows]
+    try:
+        rows = list(get_db()["saved_profiles"].find({}, {"_id": 0, "id": 1, "profile_url": 1, "name": 1}).sort("name", 1))
+        if rows:
+            return [{"id": _profile_slug(row), "name": row.get("name") or _profile_slug(row), "profile_url": row.get("profile_url")} for row in rows]
+    except Exception as e:
+        logger.warning("MongoDB list_profile_options failed (%s); using fallback.", e)
+
+    profiles, histories, _runs, _activities, _imports = _records()
+    seen: set = set()
+    result = []
+    for profile in profiles:
+        slug = _profile_slug(profile)
+        if slug and slug not in seen:
+            seen.add(slug)
+            result.append({"id": slug, "name": profile.get("name") or slug, "profile_url": profile.get("profile_url")})
+    for history in histories:
+        slug = _profile_slug(history)
+        if slug and slug not in seen:
+            seen.add(slug)
+            result.append({"id": slug, "name": history.get("subject_name") or slug, "profile_url": history.get("subject_url")})
+    result.sort(key=lambda row: str(row.get("name") or "").lower())
+    return result
 
 
 def list_runs(profile_slug: str = "", page: int = 1, per_page: int = 20) -> Dict[str, Any]:
-    db = get_db()
+    rows: List[Dict[str, Any]] = []
+    total = 0
     query = {"profile_slugs": _slug(profile_slug)} if profile_slug else {}
     page = max(1, int(page))
     per_page = min(100, max(1, int(per_page)))
-    collection = db["analysis_runs"]
-    total = collection.count_documents(query)
-    cursor = collection.find(query, {"_id": 1, "profile_slugs": 1, "profile_summaries": 1, "started_at": 1, "completed_at": 1, "status": 1, "requested_date_range": 1, "requested_activity_types": 1, "retrieval_completeness": 1, "total_activities": 1, "posts_count": 1, "videos_count": 1, "by_type": 1, "data_source": 1}).sort("completed_at", -1).skip((page - 1) * per_page).limit(per_page)
-    rows = [sanitize_doc(item) for item in cursor]
+    try:
+        db = get_db()
+        collection = db["analysis_runs"]
+        total = collection.count_documents(query)
+        cursor = collection.find(query, {"_id": 1, "profile_slugs": 1, "profile_summaries": 1, "started_at": 1, "completed_at": 1, "status": 1, "requested_date_range": 1, "requested_activity_types": 1, "retrieval_completeness": 1, "total_activities": 1, "posts_count": 1, "videos_count": 1, "by_type": 1, "data_source": 1}).sort("completed_at", -1).skip((page - 1) * per_page).limit(per_page)
+        rows = [sanitize_doc(item) for item in cursor]
+    except Exception as e:
+        logger.warning("MongoDB list_runs failed (%s); returning empty runs list.", e)
+        total = 0
+        rows = []
+
     for row in rows:
         row["run_id"] = row.pop("_id", "")
         if profile_slug:
@@ -368,11 +481,9 @@ def get_profile(slug: str) -> Optional[Dict[str, Any]]:
     clean = _slug(slug)
     if not clean:
         return None
-    db = get_db()
-    profile = db["saved_profiles"].find_one({"id": clean}, {"_id": 0})
-    if not profile:
-        profile = db["saved_profiles"].find_one({"profile_url": {"$regex": rf"/in/{re.escape(clean)}(?:/|\?|$)", "$options": "i"}}, {"_id": 0})
-    history = db["profile_analysis_history"].find_one({"slug": clean}, {"_id": 0})
+    profiles, histories, _runs, _activities, _imports = _records()
+    profile = next((p for p in profiles if _profile_slug(p) == clean), None)
+    history = next((h for h in histories if _profile_slug(h) == clean or _slug(h.get("slug")) == clean), None)
     if not profile and not history:
         return None
     if profile is None:
@@ -385,7 +496,10 @@ def get_profile(slug: str) -> Optional[Dict[str, Any]]:
 def list_content(profile_slug: str = "", kind: str = "", search: str = "", start_date: str = "", end_date: str = "", sort: str = "newest", page: int = 1, per_page: int = 20) -> Dict[str, Any]:
     profiles, histories, _runs, activities, imports = _records()
     rows = _collect_content(histories, activities, imports)
-    embed_map = load_video_embed_map(get_db()["activity_video_embeds"])
+    try:
+        embed_map = load_video_embed_map(get_db()["activity_video_embeds"])
+    except Exception:
+        embed_map = {}
     slug = _slug(profile_slug)
     normalized_kind = kind.strip().lower()
     if normalized_kind in ("photos", "image", "images", "picture"):
@@ -427,7 +541,7 @@ def list_content(profile_slug: str = "", kind: str = "", search: str = "", start
             continue
         if normalized_kind == "video" and not is_video:
             continue
-        if normalized_kind == "photo" and not is_photo:
+        if normalized_kind == "photo" and (not is_photo or not _has_accessible_image(row)):
             continue
         if normalized_kind == "like" and event_kind != "like":
             continue
@@ -435,7 +549,7 @@ def list_content(profile_slug: str = "", kind: str = "", search: str = "", start
             continue
         if normalized_kind == "repost" and event_kind != "share":
             continue
-        if normalized_kind == "other" and (event_kind in ("post", "video") or is_video):
+        if normalized_kind == "other" and (event_kind in ("post", "video") or is_video or is_photo):
             continue
         row["profile_slug"] = row_slug or None
         row["profile_name"] = profile_names.get(row_slug, row.get("subject_name") or "Unassigned import")
@@ -447,8 +561,16 @@ def list_content(profile_slug: str = "", kind: str = "", search: str = "", start
             post_url = row.get("linkedin_post_url") or row.get("original_post_url") or row.get("post_url")
             try:
                 row["embed_src"] = embed_map.get((row_slug, canonical_linkedin_post_url(post_url)))
-            except ValueError:
+            except (ValueError, TypeError):
                 row["embed_src"] = None
+            if not row.get("embed_src") and post_url:
+                p_str = str(post_url).strip()
+                urn_m = re.search(r"urn:li:(?:activity|ugcPost|share):(\d+)", p_str, re.IGNORECASE)
+                act_m = re.search(r"activity-(\d+)", p_str, re.IGNORECASE)
+                if urn_m:
+                    row["embed_src"] = f"https://www.linkedin.com/embed/feed/update/urn:li:activity:{urn_m.group(1)}"
+                elif act_m:
+                    row["embed_src"] = f"https://www.linkedin.com/embed/feed/update/urn:li:activity:{act_m.group(1)}"
         search_fields = (
             "text", "activity_text", "post_content", "original_post_text", "comment_text",
             "post_author", "original_post_author", "subject_name", "actor", "reaction_type",

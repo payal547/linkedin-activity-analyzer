@@ -579,6 +579,65 @@ def parse_activities_csv(csv_text: str) -> List[Activity]:
     return activities
 
 
+def parse_registration_csv(csv_text: str) -> Optional[str]:
+    """
+    Parses LinkedIn's official Registration.csv / Registration info.csv export file.
+    Returns normalized ISO date (YYYY-MM-DD) of account registration or None.
+    Columns typically include: Registration Date, Date, Registered Date.
+    """
+    if not csv_text or not csv_text.strip():
+        return None
+    lines = csv_text.strip().splitlines()
+    start_index = 0
+    for idx, line in enumerate(lines[:10]):
+        if any(h in line.lower() for h in ("date", "registration")):
+            start_index = idx
+            break
+    cleaned_content = "\n".join(lines[start_index:])
+    reader = csv.DictReader(io.StringIO(cleaned_content))
+    for row in reader:
+        for k, v in row.items():
+            if k and any(col in k.lower() for col in ("registration date", "registered date", "registered at", "registration", "date")):
+                if v and v.strip():
+                    norm_d = safe_normalize_date(v.strip())
+                    if norm_d:
+                        return norm_d
+                    m = re.search(r'(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})', v.strip())
+                    if m:
+                        try:
+                            from datetime import date
+                            return date(int(m.group(1)), int(m.group(2)), int(m.group(3))).isoformat()
+                        except ValueError:
+                            pass
+    return None
+
+
+def parse_registration_from_file_or_zip(file_bytes: bytes, filename: str) -> Optional[str]:
+    """Extracts verified LinkedIn registration date if Registration.csv is present in upload."""
+    if not file_bytes:
+        return None
+    if filename.lower().endswith(".zip") or zipfile.is_zipfile(io.BytesIO(file_bytes)):
+        try:
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+                for name in zf.namelist():
+                    if ".." in name or name.startswith(("/", "\\")):
+                        continue
+                    if "registration" in name.lower() and name.lower().endswith(".csv"):
+                        txt = zf.read(name).decode("utf-8-sig", errors="replace")
+                        reg_date = parse_registration_csv(txt)
+                        if reg_date:
+                            return reg_date
+        except Exception:
+            return None
+    elif "registration" in filename.lower() and filename.lower().endswith(".csv"):
+        try:
+            txt = file_bytes.decode("utf-8-sig", errors="replace")
+            return parse_registration_csv(txt)
+        except Exception:
+            return None
+    return None
+
+
 def parse_activities_from_file_or_zip(file_bytes: bytes, filename: str) -> List[Activity]:
     """Parses activities from any official LinkedIn CSV or complete export ZIP with cross-file deduplication."""
     if filename.lower().endswith(".zip") or zipfile.is_zipfile(io.BytesIO(file_bytes)):

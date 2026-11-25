@@ -13,7 +13,9 @@ from services.saved_profiles_storage import (
     load_saved_profiles,
     save_target_profile,
     remove_saved_profile,
-    extract_slug
+    extract_slug,
+    parse_linkedin_url,
+    get_saved_profile_by_url
 )
 from services.analysis_storage import save_latest_analysis, load_latest_analysis, load_profile_successful_analysis
 from services.imported_activities_storage import (
@@ -21,7 +23,11 @@ from services.imported_activities_storage import (
     load_imported_activities,
     delete_imported_activities
 )
-from linkedin.data_parser import parse_activities_csv, parse_activities_from_file_or_zip
+from linkedin.data_parser import (
+    parse_activities_csv,
+    parse_activities_from_file_or_zip,
+    parse_registration_from_file_or_zip
+)
 from services.pipeline_service import (
     start_pipeline_run, start_stage, complete_stage, fail_stage, skip_stage,
     update_pipeline_profile, complete_pipeline_run, get_latest_pipeline_run,
@@ -249,26 +255,26 @@ def resolve_linkedin_url(url: str):
     """
     Validates a LinkedIn profile URL and resolves known connection details or format clean metadata.
     Does NOT scrape or bypass LinkedIn authentication.
+    Preserves original full URL and generates normalized canonical profile URL.
     """
-    if not url or not url.strip():
+    if not url or not str(url).strip():
         return False, "Please enter a LinkedIn profile URL.", None
 
-    cleaned_url = url.strip()
-    match = re.search(r'(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/([a-zA-Z0-9_\-\%]+)', cleaned_url, re.IGNORECASE)
-    if not match:
-        return False, "Invalid LinkedIn profile URL. Example: https://www.linkedin.com/in/username", None
+    valid, err_msg, slug, canonical_url = parse_linkedin_url(url)
+    if not valid or not slug or not canonical_url:
+        return False, err_msg or "Invalid LinkedIn profile URL. Example: https://www.linkedin.com/in/username", None
 
-    slug = match.group(1).rstrip('/')
-    norm_url = f"https://www.linkedin.com/in/{slug}"
+    cleaned_url = url.strip()
 
     # 1. Check if profile matches user's saved/imported connections
     conns = load_saved_connections()
 
     for c in conns:
         c_url = (c.get("profile_url") or "").strip()
-        if extract_slug(c_url) == slug.lower():
+        if extract_slug(c_url) == slug:
             return True, None, {
-                "profile_url": norm_url,
+                "profile_url": canonical_url,
+                "original_url": cleaned_url,
                 "username": slug,
                 "name": c.get("name") or slug.replace("-", " ").title(),
                 "headline": c.get("headline") or "LinkedIn Connection",
@@ -276,16 +282,17 @@ def resolve_linkedin_url(url: str):
                 "position": c.get("position"),
                 "picture": c.get("picture"),
                 "source": c.get("source", "imported"),
-                "subject_id": c.get("id")
+                "subject_id": c.get("id") or f"profile_{slug}"
             }
 
     # 2. Check if profile matches authenticated user's own profile
     user_prof = session.get("linkedin_profile")
     if user_prof and user_prof.get("name"):
         own_sub = str(user_prof.get("sub", "")).lower()
-        if slug.lower() in own_sub:
+        if slug in own_sub:
             return True, None, {
-                "profile_url": norm_url,
+                "profile_url": canonical_url,
+                "original_url": cleaned_url,
                 "username": slug,
                 "name": user_prof.get("name"),
                 "headline": "Authenticated LinkedIn Account",
@@ -298,9 +305,10 @@ def resolve_linkedin_url(url: str):
     for sp in load_saved_profiles():
         sp_url = (sp.get("profile_url") or "").strip()
         sp_id = (sp.get("id") or "").strip().lower()
-        if extract_slug(sp_url) == slug.lower() or (sp_id and sp_id == slug.lower()):
+        if extract_slug(sp_url) == slug or (sp_id and sp_id == slug):
             return True, None, {
-                "profile_url": norm_url,
+                "profile_url": canonical_url,
+                "original_url": cleaned_url,
                 "username": slug,
                 "name": sp.get("name") or slug.replace("-", " ").title(),
                 "headline": sp.get("headline") or "LinkedIn Profile",
@@ -308,7 +316,9 @@ def resolve_linkedin_url(url: str):
                 "position": sp.get("position"),
                 "picture": sp.get("picture"),
                 "source": "real_linkedin",
-                "subject_id": f"profile_{slug}"
+                "subject_id": f"profile_{slug}",
+                "verified_registration_date": sp.get("verified_registration_date"),
+                "registration_date_source": sp.get("registration_date_source")
             }
 
     # 4. Derive clean human display name from URL slug
@@ -316,7 +326,8 @@ def resolve_linkedin_url(url: str):
     name = clean_slug.replace('-', ' ').replace('_', ' ').strip().title()
 
     return True, None, {
-        "profile_url": norm_url,
+        "profile_url": canonical_url,
+        "original_url": cleaned_url,
         "username": slug,
         "name": name or "LinkedIn Member",
         "headline": "LinkedIn Profile",
@@ -325,6 +336,72 @@ def resolve_linkedin_url(url: str):
         "picture": None,
         "source": "real_linkedin",
         "subject_id": f"profile_{slug}"
+    }
+
+
+def _build_history_limits_and_coverage(activities, requested_start, requested_end, verified_reg_date=None, reg_date_source=None, completeness="COMPLETE", status_type=""):
+    """
+    Builds official LinkedIn activity history limits metadata and date coverage.
+    Reference: https://www.linkedin.com/help/linkedin/answer/a1339548
+    """
+    valid_dates = [a["date"] for a in activities if isinstance(a, dict) and a.get("date")]
+    earliest_retrieved = min(valid_dates) if valid_dates else None
+    latest_retrieved = max(valid_dates) if valid_dates else None
+
+    # Count categories strictly
+    posts_cnt = sum(1 for a in activities if isinstance(a, dict) and a.get("type") in ("post", "article"))
+    comments_cnt = sum(1 for a in activities if isinstance(a, dict) and a.get("type") == "comment")
+    likes_cnt = sum(1 for a in activities if isinstance(a, dict) and a.get("type") in ("like", "reaction"))
+    shares_cnt = sum(1 for a in activities if isinstance(a, dict) and a.get("type") == "share")
+    videos_cnt = sum(1 for a in activities if isinstance(a, dict) and (a.get("type") == "video" or a.get("is_video") or a.get("video_url")))
+
+    # Determine registration date note (Requirement 3)
+    if verified_reg_date:
+        if requested_start and requested_start < verified_reg_date:
+            reg_note = "The selected date range starts before this member's verified LinkedIn registration date."
+        else:
+            reg_note = f"Verified account registration date: {verified_reg_date} (Source: {reg_date_source or 'Official LinkedIn Data Export'})."
+    else:
+        reg_note = "Account registration date is unavailable. We can only report the earliest activity date observed in accessible data."
+
+    official_limits = {
+        "documented_max_visibility_years": 2,
+        "inactive_hide_threshold_days": 360,
+        "official_reference_url": "https://www.linkedin.com/help/linkedin/answer/a1339548",
+        "notice": (
+            "According to official LinkedIn documentation (https://www.linkedin.com/help/linkedin/answer/a1339548), "
+            "content up to two years old can be viewed from the profile Activity page, and the Activity section "
+            "may be hidden if a member has had no activity for 360 days. Historical visibility is not a guarantee "
+            "of complete extraction, and accessible history varies by account visibility, privacy settings, and rate limits."
+        )
+    }
+
+    scanned_coverage = {
+        "scanned_range": {"start": requested_start, "end": requested_end},
+        "earliest_retrieved_activity_date": earliest_retrieved,
+        "latest_retrieved_activity_date": latest_retrieved,
+        "earliest_observed_activity_date": earliest_retrieved,
+        "category_counts": {
+            "posts": posts_cnt,
+            "comments": comments_cnt,
+            "reactions": likes_cnt,
+            "shares": shares_cnt,
+            "videos": videos_cnt
+        },
+        "status_type": status_type,
+        "retrieval_completeness": completeness
+    }
+
+    return {
+        "official_history_limits": official_limits,
+        "scanned_coverage": scanned_coverage,
+        "verified_registration_date": verified_reg_date,
+        "registration_date_source": reg_date_source if verified_reg_date else None,
+        "registration_date_note": reg_note,
+        "earliest_retrieved_activity_date": earliest_retrieved,
+        "latest_retrieved_activity_date": latest_retrieved,
+        "earliest_observed_activity_date": earliest_retrieved,
+        "selected_start_date": requested_start
     }
 
 
@@ -390,10 +467,12 @@ def save_new_target_profile():
 
 
 @activity_bp.route("/api/profiles/saved", methods=["DELETE"])
-def delete_saved_target_profile():
+@activity_bp.route("/api/saved-profiles", methods=["DELETE"])
+@activity_bp.route("/api/saved-profiles/<path:target_id>", methods=["DELETE"])
+def delete_saved_target_profile(target_id=None):
     """Removes a single saved target profile by URL or slug."""
     data = request.get_json(silent=True) or {}
-    target = data.get("url") or data.get("profile_url") or data.get("id") or request.args.get("url") or request.args.get("id")
+    target = target_id or data.get("url") or data.get("profile_url") or data.get("id") or request.args.get("url") or request.args.get("id")
     if not target:
         return jsonify({"error": "Profile URL or ID is required."}), 400
 
@@ -404,6 +483,7 @@ def delete_saved_target_profile():
     return jsonify({
         "success": True,
         "message": "Target profile removed successfully.",
+        "note": "Historical analysis records and stored activities are preserved.",
         "removed_target": target
     })
 
@@ -550,6 +630,19 @@ def analyze():
             result["requested_date_range"] = {"start": start_date, "end": end_date}
             complete_stage(run_id, 7, items_count=len(result.get("activities", [])))
 
+            # Check if Registration.csv exists in uploaded export
+            verified_reg = parse_registration_from_file_or_zip(file_bytes, upload.filename)
+            history_meta = _build_history_limits_and_coverage(
+                activities=result.get("activities", []),
+                requested_start=start_date,
+                requested_end=end_date,
+                verified_reg_date=verified_reg,
+                reg_date_source="Official LinkedIn Data Export (Registration.csv)" if verified_reg else None,
+                completeness="COMPLETE" if result.get("activities") else "NO_ACTIVITIES_IN_RANGE",
+                status_type="SUCCESS_WITH_ACTIVITIES" if result.get("activities") else "NO_ACTIVITIES_IN_RANGE"
+            )
+            result.update(history_meta)
+
             start_stage(run_id, 8, "Enriching activities with sentiment analysis")
             complete_stage(run_id, 8, items_count=len(result.get("activities", [])))
 
@@ -596,7 +689,13 @@ def analyze():
     complete_stage(run_id, 1, items_count=tot_profiles_count)
 
     start_stage(run_id, 2, "Checking LinkedIn session state")
-    complete_stage(run_id, 2, details="Session access token present" if access_token else "Public guest mode")
+    try:
+        from linkedin.playwright_service import validate_session_state
+        _, is_auth, sess_msg = validate_session_state()
+        sess_details = f"Active Chrome session: {sess_msg}" if is_auth else ("OAuth token present" if access_token else "Session not detected")
+    except Exception:
+        sess_details = "Session access token present" if access_token else "Session not detected"
+    complete_stage(run_id, 2, details=sess_details)
 
     if profiles_payload and isinstance(profiles_payload, list) and len(profiles_payload) > 0:
         kinds = data.get("activities", [])
@@ -720,6 +819,29 @@ def analyze():
                 act["target_profile_headline"] = p_headline
                 act["target_profile_photo"] = p_picture
 
+            # Check for verified registration date for this profile
+            p_reg_date = None
+            p_reg_source = None
+            if p_url:
+                try:
+                    sp = get_saved_profile_by_url(p_url)
+                    if sp:
+                        p_reg_date = sp.get("verified_registration_date")
+                        p_reg_source = sp.get("registration_date_source")
+                except Exception:
+                    pass
+
+            p_history_meta = _build_history_limits_and_coverage(
+                activities=p_analysis.get("activities", []),
+                requested_start=p_start,
+                requested_end=p_end,
+                verified_reg_date=p_reg_date,
+                reg_date_source=p_reg_source,
+                completeness=p_status_tracker.get("retrieval_completeness", "COMPLETE"),
+                status_type=p_status_tracker.get("status_type", "")
+            )
+            p_analysis.update(p_history_meta)
+
             profile_results.append(p_analysis)
             all_activities.extend(p_analysis.get("activities", []))
 
@@ -741,6 +863,16 @@ def analyze():
             else ("PARTIAL_GUEST_LIMIT" if any(pr.get("retrieval_completeness") == "PARTIAL_GUEST_LIMIT" for pr in profile_results)
             else ("UNAVAILABLE" if all(pr.get("retrieval_completeness") in ("UNAVAILABLE", "BLOCKED", "FAILED") for pr in profile_results)
             else "COMPLETE"))
+        )
+
+        batch_history_meta = _build_history_limits_and_coverage(
+            activities=all_activities,
+            requested_start=min((pr.get("date_range", {}).get("start") for pr in profile_results if pr.get("date_range", {}).get("start")), default=None),
+            requested_end=max((pr.get("date_range", {}).get("end") for pr in profile_results if pr.get("date_range", {}).get("end")), default=None),
+            verified_reg_date=None,
+            reg_date_source=None,
+            completeness=top_completeness,
+            status_type=top_status_type
         )
 
         combined_result = {
@@ -773,7 +905,9 @@ def analyze():
                 "end": max((pr.get("date_range", {}).get("end") for pr in profile_results if pr.get("date_range", {}).get("end")), default=None)
             },
             "activities": all_activities,
-            "sentiment_summary": compute_sentiment_summary(all_activities)
+            "sentiment_summary": compute_sentiment_summary(all_activities),
+            "official_history_limits": batch_history_meta["official_history_limits"],
+            "scanned_coverage": batch_history_meta["scanned_coverage"]
         }
 
         start_stage(run_id, 7, "Retrieving historical activities from MongoDB and storage")
@@ -859,6 +993,12 @@ def analyze():
     elif date_type in ("1year", "365days", "year") and not start_date:
         start_date = (date.today() - timedelta(days=364)).isoformat()
         end_date = today_str
+    elif date_type in ("2years", "2year", "730days", "two_years", "2_years") and not start_date:
+        start_date = (date.today() - timedelta(days=729)).isoformat()
+        end_date = today_str
+    elif date_type == "older1year" and not start_date:
+        end_date = (date.today() - timedelta(days=365)).isoformat()
+        start_date = (date.today() - timedelta(days=729)).isoformat()
     elif date_type == "all":
         start_date = None
         end_date = None
@@ -995,11 +1135,48 @@ def analyze():
                 filtered_hist["status_type"] = status_tracker.get("status_type", "")
                 result["historical_successful_analysis"] = filtered_hist
 
-    # Update persistent storage for target profile
-    target_picture = None
+    # Profile identity verification (Requirement 1)
+    req_slug = extract_slug(subject_url) if subject_url else ""
+    res_url = result.get("subject_url") or ""
+    res_slug = extract_slug(res_url) if res_url else (extract_slug(result.get("subject_id") or "") or req_slug)
+
+    extracted_identity_match = True
+    identity_warning = None
+    if req_slug and res_slug and req_slug != res_slug:
+        extracted_identity_match = False
+        identity_warning = f"Identity verification warning: requested profile '{req_slug}' does not match extracted profile '{res_slug}'. Activities have not been attached to the wrong saved profile."
+
+    result["identity_verified"] = extracted_identity_match
+    result["identity_warning"] = identity_warning
+
+    # Check for verified registration date from saved profile or uploaded archive (Requirement 3)
+    verified_reg_date = None
+    reg_date_source = None
     if subject_url:
         try:
-            from services.saved_profiles_storage import get_saved_profile_by_url
+            saved_prof = get_saved_profile_by_url(subject_url)
+            if saved_prof:
+                verified_reg_date = saved_prof.get("verified_registration_date")
+                reg_date_source = saved_prof.get("registration_date_source")
+        except Exception:
+            pass
+
+    # Build official LinkedIn activity history limits metadata and date coverage (Requirement 2 & 3)
+    history_meta = _build_history_limits_and_coverage(
+        activities=result.get("activities", []),
+        requested_start=start_date,
+        requested_end=end_date,
+        verified_reg_date=verified_reg_date,
+        reg_date_source=reg_date_source,
+        completeness=status_tracker.get("retrieval_completeness", "COMPLETE" if (raw_activities and len(raw_activities) > 0) else "UNAVAILABLE"),
+        status_type=status_tracker.get("status_type", "")
+    )
+    result.update(history_meta)
+
+    # Update persistent storage for target profile ONLY if identity is verified (Requirement 1)
+    target_picture = None
+    if subject_url and extracted_identity_match:
+        try:
             saved_prof = get_saved_profile_by_url(subject_url)
             if saved_prof and saved_prof.get("picture"):
                 target_picture = saved_prof.get("picture")
@@ -1013,7 +1190,9 @@ def analyze():
             "profile_url": subject_url,
             "name": subject_name,
             "headline": headline,
-            "picture": target_picture
+            "picture": target_picture,
+            "verified_registration_date": verified_reg_date,
+            "registration_date_source": reg_date_source
         })
     else:
         target_picture = sess_prof.get("picture") or None
@@ -1044,7 +1223,18 @@ def analyze():
         "retrieval_completeness": status_tracker.get("retrieval_completeness", "COMPLETE" if (raw_activities and len(raw_activities) > 0) else "UNAVAILABLE"),
         "empty_message": result.get("empty_message", ""),
         "filtered_activity_types": kinds,
-        "historical_successful_analysis": result.get("historical_successful_analysis")
+        "historical_successful_analysis": result.get("historical_successful_analysis"),
+        "identity_verified": extracted_identity_match,
+        "identity_warning": identity_warning,
+        "official_history_limits": history_meta["official_history_limits"],
+        "scanned_coverage": history_meta["scanned_coverage"],
+        "verified_registration_date": verified_reg_date,
+        "registration_date_source": reg_date_source,
+        "registration_date_note": history_meta["registration_date_note"],
+        "earliest_retrieved_activity_date": history_meta["earliest_retrieved_activity_date"],
+        "latest_retrieved_activity_date": history_meta["latest_retrieved_activity_date"],
+        "earliest_observed_activity_date": history_meta["earliest_observed_activity_date"],
+        "selected_start_date": start_date
     }
 
     result["is_multi_profile"] = False
@@ -1080,13 +1270,10 @@ def get_latest_analysis():
     """
     Returns the most recent analysis result for dashboard display with strict profile identity verification.
     If a specific subject_id or profile_url is requested, verifies that the latest analysis belongs to that subject.
-    If the latest analysis belongs to a different profile, attempts to load the requested profile's preserved
-    successful analysis from profile_analysis_history. If none exists, returns 404 with has_data: False,
-    never leaking another profile's data.
+    Never matches profile identity by display name alone (Phase 4 - Issue 1).
     """
     req_subject_id = (request.args.get("subject_id") or "").strip()
     req_profile_url = (request.args.get("profile_url") or "").strip()
-    req_subject_name = (request.args.get("subject_name") or "").strip()
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", type=int)
 
@@ -1094,25 +1281,21 @@ def get_latest_analysis():
 
     analysis = session.get("latest_analysis") or load_latest_analysis()
 
-    if not req_slug and not req_subject_name and not req_subject_id and not req_profile_url:
+    if not req_slug and not req_subject_id and not req_profile_url:
         sess_prof = session.get("selected_profile") or {}
         req_profile_url = sess_prof.get("profile_url") or ""
         req_subject_id = sess_prof.get("subject_id") or ""
-        req_subject_name = sess_prof.get("name") or ""
         req_slug = extract_slug(req_profile_url) or extract_slug(req_subject_id)
 
-    # If a specific profile was requested, verify identity
-    if req_slug or req_subject_name:
+    # If a specific profile was requested, verify identity using slug or reliable ID (never display name)
+    if req_slug:
         is_match = False
         if analysis:
             a_url = analysis.get("subject_url") or ""
             a_id = analysis.get("subject_id") or ""
-            a_name = analysis.get("subject_name") or ""
             a_slug = extract_slug(a_url) or extract_slug(a_id)
 
             if req_slug and a_slug and req_slug == a_slug:
-                is_match = True
-            elif req_subject_name and a_name and req_subject_name.strip().lower() == a_name.strip().lower():
                 is_match = True
             elif req_subject_id and a_id and req_subject_id.strip().lower() == a_id.strip().lower():
                 is_match = True

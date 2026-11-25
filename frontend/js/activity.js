@@ -137,6 +137,9 @@ function calculatePresetDates(preset) {
     } else if (preset === "1year" || preset === "365days") {
         // Last 1 Year: 365 days inclusive (today minus 364 days, up to 1 full previous year)
         start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 364);
+    } else if (preset === "2years" || preset === "2year" || preset === "730days") {
+        // Last 2 Years: 730 days inclusive (today minus 729 days, spanning the full 2-year LinkedIn visibility limit)
+        start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 729);
     } else if (preset === "older1year") {
         // The complete year before the most recent year.
         end.setFullYear(end.getFullYear() - 1);
@@ -285,6 +288,7 @@ function onCustomDateChange() {
         const p10 = calculatePresetDates("10days");
         const p30 = calculatePresetDates("30days");
         const p1year = calculatePresetDates("1year");
+        const p2years = calculatePresetDates("2years");
         const pOlder1Year = calculatePresetDates("older1year");
 
         if (startVal === pToday.startDDMMYYYY && endVal === pToday.endDDMMYYYY) {
@@ -297,6 +301,8 @@ function onCustomDateChange() {
             matchedPreset = "30days";
         } else if (startVal === p1year.startDDMMYYYY && endVal === p1year.endDDMMYYYY) {
             matchedPreset = "1year";
+        } else if (startVal === p2years.startDDMMYYYY && endVal === p2years.endDDMMYYYY) {
+            matchedPreset = "2years";
         } else if (startVal === pOlder1Year.startDDMMYYYY && endVal === pOlder1Year.endDDMMYYYY) {
             matchedPreset = "older1year";
         }

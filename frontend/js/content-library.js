@@ -79,7 +79,7 @@
       if (requestVersion !== state.requestVersion) return;
       state.totalPages = result.total_pages || 1;
       renderContent(result);
-      setStatus("Showing actual records currently stored in MongoDB.");
+      setStatus("Showing stored activity records.");
     } catch (error) {
       if (requestVersion !== state.requestVersion) return;
       setStatus(`${error.message || "Could not load content."} No sample data is being shown.`, true);
@@ -101,8 +101,31 @@
     const normalizedMime = String(declaredMime || "").split(";")[0].trim().toLowerCase();
     const supportedMimes = new Set(["video/mp4", "video/webm", "video/ogg"]);
     const mime = supportedMimes.has(normalizedMime) ? normalizedMime : extensionMime;
-    // A post permalink, LinkedIn video page, blob URL, or external embed URL is not a direct media stream.
     return mime ? { url, mime } : null;
+  }
+
+  function externalVideoEmbed(value) {
+    const url = safeUrl(value);
+    if (!url) return "";
+    try {
+      const parsed = new URL(url);
+      const host = parsed.hostname.toLowerCase();
+      if (host === "youtube.com" || host.endsWith(".youtube.com")) {
+        const v = parsed.searchParams.get("v");
+        if (v) return `https://www.youtube.com/embed/${encodeURIComponent(v)}`;
+        const embedMatch = parsed.pathname.match(/\/embed\/([a-zA-Z0-9_-]+)/);
+        if (embedMatch) return `https://www.youtube.com/embed/${encodeURIComponent(embedMatch[1])}`;
+      }
+      if (host === "youtu.be") {
+        const id = parsed.pathname.replace(/^\//, "");
+        if (id) return `https://www.youtube.com/embed/${encodeURIComponent(id)}`;
+      }
+      if (host === "vimeo.com" || host.endsWith(".vimeo.com")) {
+        const id = parsed.pathname.replace(/^\//, "");
+        if (id && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${encodeURIComponent(id)}`;
+      }
+      return "";
+    } catch (_) { return ""; }
   }
 
   function officialLinkedInEmbed(value) {
@@ -111,9 +134,13 @@
     try {
       const parsed = new URL(url);
       const host = parsed.hostname.toLowerCase();
-      if (parsed.protocol !== "https:" || !["linkedin.com", "www.linkedin.com"].includes(host)) return "";
-      if (!/^\/embed\/feed\/update\//i.test(parsed.pathname)) return "";
-      return parsed.href;
+      if (!["linkedin.com", "www.linkedin.com"].includes(host)) return "";
+      if (/^\/embed\/feed\/update\//i.test(parsed.pathname)) return parsed.href;
+      const actMatch = parsed.href.match(/urn:li:(?:activity|ugcPost|share):(\d+)/i) || parsed.href.match(/activity-(\d+)/i);
+      if (actMatch) {
+        return `https://www.linkedin.com/embed/feed/update/urn:li:activity:${actMatch[1]}`;
+      }
+      return "";
     } catch (_) { return ""; }
   }
 
@@ -127,12 +154,24 @@
     } catch (_) { return ""; }
   }
 
+  function isImageUrl(url) {
+    if (!url || typeof url !== "string") return false;
+    const clean = url.trim().toLowerCase().split("?")[0];
+    if (/\.(mp4|m4v|webm|ogg|mov)$/i.test(clean)) return false;
+    return true;
+  }
+
   function imageSource(row) {
-    const candidates = [row.image_url, row.photo_url, row.media_url];
+    const candidates = [
+      row.image_url,
+      row.photo_url,
+      row.media_url,
+      (!row.is_video ? row.video_thumbnail : "")
+    ];
     for (const item of [...(Array.isArray(row.images) ? row.images : []), ...(Array.isArray(row.media_urls) ? row.media_urls : [])]) {
       candidates.push(typeof item === "string" ? item : item?.url || item?.src || item?.media_url);
     }
-    return candidates.map(safeUrl).find(Boolean) || "";
+    return candidates.map(safeUrl).filter(isImageUrl).find(Boolean) || "";
   }
 
   function videoUnavailableMessage(row, hasBadStream = false) {
@@ -147,25 +186,34 @@
   function renderMedia(row) {
     if (row.is_video) {
       const stream = directVideoSource(row.video_stream_url || row.video_url, row.video_mime_type);
-      const embed = officialLinkedInEmbed(row.embed_src);
-      const thumbnail = safeUrl(row.video_thumbnail || row.media_url);
+      const originalUrl = linkedInPostUrl(row.linkedin_post_url || row.original_post_url || row.post_url);
+      const embed = officialLinkedInEmbed(row.embed_src) || officialLinkedInEmbed(originalUrl) || externalVideoEmbed(row.video_stream_url || row.video_url);
+      const thumbnail = safeUrl(row.video_thumbnail || (row.is_video ? row.media_url : ""));
+
       if (stream) {
         return `<div class="content-media library-video-wrap"><video class="library-video" controls playsinline preload="metadata"${thumbnail ? ` poster="${escapeHtml(thumbnail)}"` : ""} aria-label="Video activity"><source src="${escapeHtml(stream.url)}" type="${stream.mime}"></video>${embed ? `<iframe class="library-video-embed" src="${escapeHtml(embed)}" title="Embedded LinkedIn post" loading="lazy" allowfullscreen hidden></iframe>` : ""}</div>`;
       }
-      if (embed) return `<div class="content-media library-video-wrap"><iframe class="library-video-embed" src="${escapeHtml(embed)}" title="Embedded LinkedIn post" loading="lazy" allowfullscreen></iframe></div>`;
-      return `<div class="content-media library-unavailable-media">${thumbnail ? `<img class="library-preview-image" loading="lazy" src="${escapeHtml(thumbnail)}" alt="Video thumbnail">` : ""}<div class="library-media-empty"><strong>Inline playback unavailable</strong><span>${escapeHtml(videoUnavailableMessage(row))}</span></div></div>`;
+      if (embed) {
+        return `<div class="content-media library-video-wrap has-embed"><iframe class="library-video-embed" src="${escapeHtml(embed)}" title="Embedded LinkedIn video player" loading="lazy" allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share" allowfullscreen></iframe></div>`;
+      }
+      if (thumbnail) {
+        return `<div class="content-media library-video-wrap library-video-preview"><a class="library-preview-link" href="${escapeHtml(originalUrl || '#')}" target="_blank" rel="noopener noreferrer" title="Click to view video on LinkedIn"><img class="library-preview-image" loading="lazy" src="${escapeHtml(thumbnail)}" alt="Video thumbnail"><div class="library-video-play-overlay"><span class="library-play-btn" aria-hidden="true">&#9658;</span><span class="library-video-tag">Watch on LinkedIn ↗</span></div></a></div>`;
+      }
+      return `<div class="content-media library-video-wrap library-media-empty"><strong>Video activity</strong><span>${escapeHtml(videoUnavailableMessage(row))}</span></div>`;
     }
 
     if (row.is_photo) {
       const image = imageSource(row);
-      if (image) return `<div class="content-media"><img class="library-photo" loading="lazy" src="${escapeHtml(image)}" alt="Extracted activity image"></div>`;
-      return `<div class="library-media-empty"><strong>Photo identified</strong><span>An accessible image URL was not stored with this activity.</span></div>`;
+      if (image) {
+        return `<div class="content-media library-photo-wrap" onclick="window.open('${escapeHtml(image)}','_blank')" role="button" tabindex="0" title="Click to open image in full view"><img class="library-photo" loading="lazy" src="${escapeHtml(image)}" alt="Activity photo"></div>`;
+      }
+      return "";
     }
     return "";
   }
 
   function eventLabel(kind) {
-    return ({ post: "Post", video: "Video activity", like: "Like / Reaction", comment: "Comment", share: "Repost / Share" })[kind] || "Activity";
+    return ({ post: "Post", video: "Video", like: "Like / Reaction", comment: "Comment", share: "Repost / Share" })[kind] || "Activity";
   }
 
   function initials(name) {
@@ -195,7 +243,6 @@
 
   function renderCard(row) {
     const kind = row.activity_kind || row.type || "other";
-    const mediaType = row.is_video ? "Video" : row.is_photo ? "Photo" : "";
     const eventText = kind === "comment"
       ? row.comment_text || row.activity_text || row.text
       : kind === "like"
@@ -208,7 +255,14 @@
     const author = row.post_author || row.original_post_author || row.subject_name || "LinkedIn activity";
     const originalUrl = linkedInPostUrl(row.linkedin_post_url || row.original_post_url || row.post_url);
     const engagementHtml = engagement(row);
-    const badges = `<span class="content-badge">${escapeHtml(eventLabel(kind))}</span>${mediaType ? `<span class="content-badge content-badge-media">${mediaType}</span>` : ""}`;
+
+    let badges = "";
+    if (row.is_photo) {
+      badges += `<span class="content-badge content-badge-photo">Photo</span>`;
+    } else if (row.is_video) {
+      badges += `<span class="content-badge content-badge-video">Video</span>`;
+    }
+    badges += `<span class="content-badge">${escapeHtml(eventLabel(kind))}</span>`;
 
     return `<article class="content-card library-card">${renderMedia(row)}<div class="content-card-body"><div class="content-meta">${profileIdentity(row)}<span class="content-date">${escapeHtml(formatDate(row.date))}</span></div><div class="library-badges">${badges}</div><h3>${escapeHtml(author)}</h3><p class="content-text">${escapeHtml(eventText || "No event text was stored for this activity.")}</p>${showOriginalContext ? `<div class="library-original-post"><strong>Original post</strong><p>${escapeHtml(originalText)}</p></div>` : ""}${engagementHtml ? `<div class="library-engagement">${engagementHtml}</div>` : ""}${videoEmbedEditor(row, originalUrl)}${originalUrl ? `<div class="library-actions"><a href="${escapeHtml(originalUrl)}" target="_blank" rel="noopener noreferrer">Open Original Post on LinkedIn ↗</a></div>` : ""}</div></article>`;
   }

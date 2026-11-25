@@ -1,6 +1,6 @@
 (() => {
   "use strict";
-  const state = { overview: null, profiles: [], profilePage: 1, profileTotalPages: 1, profileSort: "name", profileOrder: "asc", contentPage: 1, contentTotalPages: 1, runPage: 1, runTotalPages: 1, metric: "activity_count", trends: [] };
+  const state = { overview: null, profiles: [], profilePage: 1, profileTotalPages: 1, profileSort: "name", profileOrder: "asc", runPage: 1, runTotalPages: 1, metric: "activity_count", trends: [] };
   const byId = (id) => document.getElementById(id);
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const safeUrl = (value) => { try { const url = new URL(value, window.location.origin); return ["http:", "https:"].includes(url.protocol) ? url.href : ""; } catch (_) { return ""; } };
@@ -32,11 +32,10 @@
       state.runPage = runs.page || 1; state.runTotalPages = runs.total_pages || 1;
       renderOverview(overview); renderProfiles(profiles); renderRuns(runs); fillProfileSelects(profileOptions.items || []);
       state.trends = overview.trends || []; renderChart();
-      await loadContent();
       const notice = byId("dataNotice"); notice.textContent = "Showing records read directly from MongoDB."; notice.className = "notice";
     } catch (error) {
       showError(error);
-      ["profileRows", "runRows", "contentGrid"].forEach((id) => { if (byId(id)) byId(id).innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`; });
+      ["profileRows", "runRows"].forEach((id) => { if (byId(id)) byId(id).innerHTML = `<tr><td colspan="7">${escapeHtml(error.message)}</td></tr>`; });
       byId("trendChart").innerHTML = `<p class="empty">${escapeHtml(error.message)}</p>`;
     }
   }
@@ -85,7 +84,8 @@
 
   function fillProfileSelects(profiles) {
     const options = profiles.map((profile) => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name)}</option>`).join("");
-    ["trendProfile", "contentProfile"].forEach((id) => { const select = byId(id); select.innerHTML = `<option value="">All profiles</option>${options}`; });
+    const trendSelect = byId("trendProfile");
+    if (trendSelect) trendSelect.innerHTML = `<option value="">All profiles</option>${options}`;
   }
 
   async function loadRuns() {
@@ -112,7 +112,12 @@
   function renderChart() {
     const rows = state.trends || [];
     if (!rows.length) { byId("trendChart").innerHTML = `<p class="empty">No monthly data available.</p>`; return; }
-    const width = 1000, height = 270, left = 45, right = 18, top = 18, bottom = 44;
+    const chartWrap = byId("trendChart");
+    const containerWidth = chartWrap ? chartWrap.clientWidth : 800;
+    const width = Math.max(300, containerWidth || 800);
+    const height = width < 480 ? 220 : 270;
+    const left = width < 480 ? 32 : 45;
+    const right = 16, top = 18, bottom = 44;
     const values = rows.map((row) => row[state.metric]);
     const known = values.filter((value) => value !== null && value !== undefined).map(Number);
     if (!known.length) { byId("trendChart").innerHTML = `<p class="empty">No stored ${state.metric.replaceAll("_count", "")} data is available for this period.</p>`; return; }
@@ -124,49 +129,22 @@
     rows.forEach((row, index) => { const value = row[state.metric]; if (value === null || value === undefined) { if (segment.length) segments.push(segment); segment = []; } else segment.push(`${x(index)},${y(value)}`); });
     if (segment.length) segments.push(segment);
     const lines = segments.map((points) => points.length > 1 ? `<polyline class="chart-line" points="${points.join(" ")}"/>` : "").join("");
-    const dots = rows.map((row, index) => { const value = row[state.metric]; const isUnknown = value === null || value === undefined; const cy = isUnknown ? top + plotH + 8 : y(value); return `<circle class="chart-dot${isUnknown ? " unknown" : ""}" tabindex="0" role="img" aria-label="${escapeHtml(row.month)}: ${isUnknown ? "unknown coverage" : `${escapeHtml(value)} ${escapeHtml(state.metric)}`}" data-index="${index}" cx="${x(index)}" cy="${cy}" r="5"/><text class="chart-label" x="${x(index)}" y="${height-15}" text-anchor="middle">${escapeHtml(row.month.slice(5))}</text>`; }).join("");
+    const step = width < 380 ? 3 : (width < 600 ? 2 : 1);
+    const dots = rows.map((row, index) => {
+      const value = row[state.metric];
+      const isUnknown = value === null || value === undefined;
+      const cy = isUnknown ? top + plotH + 8 : y(value);
+      const showLabel = (index % step === 0) || (index === rows.length - 1);
+      const labelText = showLabel ? `<text class="chart-label" x="${x(index)}" y="${height-15}" text-anchor="middle">${escapeHtml(row.month.slice(5))}</text>` : "";
+      return `<circle class="chart-hit-area" data-index="${index}" cx="${x(index)}" cy="${cy}" r="16" fill="transparent" style="cursor:pointer;"/><circle class="chart-dot${isUnknown ? " unknown" : ""}" tabindex="0" role="img" aria-label="${escapeHtml(row.month)}: ${isUnknown ? "unknown coverage" : `${escapeHtml(value)} ${escapeHtml(state.metric)}`}" data-index="${index}" cx="${x(index)}" cy="${cy}" r="5"/>${labelText}`;
+    }).join("");
     const title = state.metric.replaceAll("_", " ").replace("count", "").trim();
-    byId("trendChart").innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Monthly ${escapeHtml(title)} trend"><g>${guides}</g>${lines}<g>${dots}</g></svg>`;
-    byId("trendChart").querySelectorAll(".chart-dot").forEach((dot) => {
-      const show = (event) => { const row = rows[Number(dot.dataset.index)]; const value = row[state.metric]; const tip = byId("chartTooltip"); tip.textContent = `${row.month}: ${value == null ? "Unknown coverage" : Number(value).toLocaleString() + " " + title}`; tip.hidden = false; tip.style.left = `${Math.min(window.innerWidth - 210, event.clientX + 12)}px`; tip.style.top = `${Math.max(8, event.clientY - 38)}px`; };
+    byId("trendChart").innerHTML = `<svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Monthly ${escapeHtml(title)} trend"><g>${guides}</g>${lines}<g>${dots}</g></svg>`;
+    byId("trendChart").querySelectorAll(".chart-dot, .chart-hit-area").forEach((dot) => {
+      const show = (event) => { const row = rows[Number(dot.dataset.index)]; const value = row[state.metric]; const tip = byId("chartTooltip"); tip.textContent = `${row.month}: ${value == null ? "Unknown coverage" : Number(value).toLocaleString() + " " + title}`; tip.hidden = false; tip.style.left = `${Math.min(window.innerWidth - 210, (event.clientX || window.innerWidth / 2) + 12)}px`; tip.style.top = `${Math.max(8, (event.clientY || window.innerHeight / 2) - 38)}px`; };
       dot.addEventListener("pointerenter", show); dot.addEventListener("pointermove", show); dot.addEventListener("pointerleave", () => { byId("chartTooltip").hidden = true; });
       dot.addEventListener("focus", (event) => show({ clientX: window.innerWidth / 2, clientY: window.innerHeight / 2 }));
     });
-  }
-
-  async function loadContent() {
-    const params = asQuery({ profile: byId("contentProfile").value, type: byId("contentType").value, q: byId("contentSearch").value.trim(), from: byId("contentFrom").value, to: byId("contentTo").value, sort: byId("contentSort").value, page: state.contentPage, per_page: 12 });
-    const data = await api(`/api/dashboard/content?${params}`);
-    state.contentTotalPages = data.total_pages || 1;
-    renderContent(data);
-  }
-
-  function videoMarkup(row) {
-    const video = safeUrl(row.video_url); const thumb = safeUrl(row.video_thumbnail || row.media_url); const post = safeUrl(row.post_url || row.original_post_url || row.video_url);
-    if (!row.is_video) return row.media_url && safeUrl(row.media_url) ? `<div class="content-media"><img loading="lazy" src="${escapeHtml(safeUrl(row.media_url))}" alt="Post media"></div>` : "";
-    const direct = video && (/\.(mp4|webm|ogg|m4v)(\?.*)?$/i.test(video) || /videocdn/i.test(video));
-    const extension = direct ? (video.match(/\.(mp4|webm|ogg|m4v)(\?.*)?$/i) || [])[1] : "mp4";
-    const mime = { mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", ogg: "video/ogg" }[(extension || "mp4").toLowerCase()] || "video/mp4";
-    if (direct) return `<div class="content-media"><video controls preload="metadata"${thumb ? ` poster="${escapeHtml(thumb)}"` : ""}><source src="${escapeHtml(video)}" type="${mime}"></video></div><div class="content-card-body"><a href="${escapeHtml(post || "#")}" target="_blank" rel="noopener noreferrer">If playback is unavailable, open on LinkedIn ↗</a></div>`;
-    if (video && /(^|\.)youtube\.com|youtu\.be|(^|\.)vimeo\.com/i.test(new URL(video).hostname)) {
-      let embed = video;
-      try { const parsed = new URL(video); if (parsed.hostname.includes("youtu.be")) embed = `https://www.youtube-nocookie.com/embed/${parsed.pathname.slice(1)}`; else if (parsed.hostname.includes("youtube.com") && parsed.searchParams.get("v")) embed = `https://www.youtube-nocookie.com/embed/${parsed.searchParams.get("v")}`; else if (parsed.hostname.includes("vimeo.com")) embed = `https://player.vimeo.com/video/${parsed.pathname.split("/").filter(Boolean).pop()}`; } catch (_) {}
-      return `<div class="content-media"><iframe loading="lazy" src="${escapeHtml(embed)}" title="Embedded video" allow="fullscreen; picture-in-picture" allowfullscreen></iframe></div>`;
-    }
-    return `<div class="content-media">${thumb ? `<a href="${escapeHtml(post || "#")}" target="_blank" rel="noopener noreferrer"><img loading="lazy" src="${escapeHtml(thumb)}" alt="Video thumbnail"><span class="sr-only">Open LinkedIn video</span></a>` : `<a href="${escapeHtml(post || "#")}" target="_blank" rel="noopener noreferrer">Video stream unavailable · Open on LinkedIn</a>`}</div>`;
-  }
-
-  function renderContent(data) {
-    const items = data.items || [];
-    byId("contentCount").textContent = `${Number(data.total_items || 0).toLocaleString()} records`;
-    byId("contentGrid").innerHTML = items.length ? items.map((row) => {
-      const profile = state.profiles.find((p) => p.id === row.profile_slug);
-      const kind = row.is_video ? "Video" : row.type || "Activity";
-      const text = row.post_content || row.comment_text || row.text || "No text was stored for this activity.";
-      return `<article class="content-card">${videoMarkup(row)}<div class="content-card-body"><div class="content-meta"><span class="content-badge">${escapeHtml(kind)}</span><span>${escapeHtml(profile?.name || row.profile_slug || "Unassigned import")}</span><span>${escapeHtml(formatDate(row.date))}</span></div><h3>${escapeHtml(row.post_author || row.subject_name || "LinkedIn activity")}</h3><p class="content-text">${escapeHtml(text)}</p>${safeUrl(row.post_url) ? `<a href="${escapeHtml(safeUrl(row.post_url))}" target="_blank" rel="noopener noreferrer">Open original activity ↗</a>` : ""}</div></article>`;
-    }).join("") : `<div class="empty">No stored content matches these filters.</div>`;
-    byId("contentPageLabel").textContent = `Page ${data.page || 1} of ${data.total_pages || 1}`;
-    byId("contentPrev").disabled = (data.page || 1) <= 1; byId("contentNext").disabled = (data.page || 1) >= (data.total_pages || 1);
   }
 
   function bindControls() {
@@ -176,15 +154,9 @@
     byId("profilesNext").addEventListener("click", () => { state.profilePage += 1; loadProfiles().catch(showError); });
     byId("runsPrev").addEventListener("click", () => { state.runPage = Math.max(1, state.runPage - 1); loadRuns().catch(showError); });
     byId("runsNext").addEventListener("click", () => { state.runPage += 1; loadRuns().catch(showError); });
-    byId("contentPrev").addEventListener("click", () => { state.contentPage = Math.max(1, state.contentPage - 1); loadContent().catch(showError); });
-    byId("contentNext").addEventListener("click", () => { state.contentPage += 1; loadContent().catch(showError); });
-    byId("applyContentFilters").addEventListener("click", () => { state.contentPage = 1; loadContent().catch(showError); });
-    byId("contentSearch").addEventListener("keydown", (event) => { if (event.key === "Enter") { state.contentPage = 1; loadContent().catch(showError); } });
-    byId("contentProfile").addEventListener("change", () => { state.contentPage = 1; loadContent().catch(showError); });
-    byId("contentType").addEventListener("change", () => { state.contentPage = 1; loadContent().catch(showError); });
-    byId("contentSort").addEventListener("change", () => { state.contentPage = 1; loadContent().catch(showError); });
     document.querySelectorAll(".metric-button").forEach((button) => button.addEventListener("click", () => { document.querySelectorAll(".metric-button").forEach((b) => b.classList.toggle("active", b === button)); state.metric = button.dataset.metric; renderChart(); }));
     byId("trendProfile").addEventListener("change", () => loadTrends().catch(showError));
+    window.addEventListener("resize", debounce(() => renderChart(), 200));
   }
 
   function debounce(fn, delay) { let timer; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), delay); }; }

@@ -952,6 +952,100 @@
             color: #dc2626;
             border-color: #fca5a5;
         }
+
+        .btn-delete-profile {
+            background: #fff;
+            color: #b91c1c;
+            border: 1px solid #fca5a5;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .btn-delete-profile:hover {
+            background: #fee2e2;
+            color: #991b1b;
+            border-color: #f87171;
+        }
+
+        .btn-copy-url {
+            background: #f1f5f9;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            padding: 3px 8px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: all 0.15s ease;
+            vertical-align: middle;
+            margin-left: 6px;
+        }
+
+        .btn-copy-url:hover {
+            background: #e2e8f0;
+            color: #0f172a;
+        }
+
+        .saved-profile-link-wrap {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            max-width: 100%;
+            margin-top: 3px;
+        }
+
+        .saved-profile-link {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 250px;
+            display: inline-block;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            backdrop-filter: blur(2px);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+        }
+
+        .modal-content {
+            background: #fff;
+            border-radius: 14px;
+            max-width: 480px;
+            width: 100%;
+            padding: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e2e8f0;
+            box-sizing: border-box;
+        }
+
+        .saved-profile-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #0f172a;
+            color: #fff;
+            padding: 12px 20px;
+            border-radius: 10px;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: opacity 0.3s ease;
+        }
     </style>
     <link rel="stylesheet" href="/css/style.css">
     <link rel="stylesheet" href="/css/site-theme.css">
@@ -1858,8 +1952,9 @@
                                 <input type="checkbox" class="profile-select-checkbox" data-url="${escapeAttr(p.profile_url)}" onchange="handleProfileSelectionChange(this)">
                                 <span class="select-text">Select</span>
                             </label>
-                            <button type="button" class="btn-remove-profile" onclick="removeSavedProfile('${escapeAttr(p.profile_url)}')">
-                                Remove
+                            <button type="button" class="btn-remove-profile btn-delete-profile" onclick="confirmDeleteSavedProfile('${escapeAttr(p.profile_url)}', '${escapeAttr(p.name)}')" title="Delete this saved profile" aria-label="Delete saved profile ${escapeAttr(p.name)}">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:3px; vertical-align:-1px;"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+                                Delete
                             </button>
                         </div>
                         <div class="saved-profile-body">
@@ -1867,9 +1962,15 @@
                             <div class="saved-profile-meta">
                                 <div class="saved-profile-name">${escapeHTML(p.name)}</div>
                                 <div class="saved-profile-headline">${escapeHTML(p.headline || "LinkedIn Profile")}</div>
-                                <a class="saved-profile-link" href="${escapeAttr(p.profile_url)}" target="_blank" rel="noopener noreferrer">
-                                    ${escapeHTML(p.profile_url)}
-                                </a>
+                                <div class="saved-profile-link-wrap">
+                                    <a class="saved-profile-link" href="${escapeAttr(p.profile_url)}" target="_blank" rel="noopener noreferrer" title="${escapeAttr(p.profile_url)}">
+                                        ${escapeHTML(p.profile_url)}
+                                    </a>
+                                    <button type="button" class="btn-copy-url" onclick="copySavedProfileUrl('${escapeAttr(p.profile_url)}', this)" title="Copy canonical profile URL" aria-label="Copy canonical profile URL">
+                                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                                        <span>Copy</span>
+                                    </button>
+                                </div>
                                 ${dateStr ? `<div class="saved-profile-time">Last analyzed: ${escapeHTML(dateStr)}</div>` : ''}
                             </div>
                         </div>
@@ -1880,6 +1981,7 @@
                                     <option value="custom">Custom range</option>
                                     <option value="30days">Last 30 days</option>
                                     <option value="1year">Last 1 year</option>
+                                    <option value="2years">Last 2 years</option>
                                     <option value="older1year">1-2 years ago</option>
                                 </select>
                             </div>
@@ -2280,28 +2382,116 @@
             }
         }
 
-        async function removeSavedProfile(profileUrl) {
-            if (!confirm("Are you sure you want to remove this saved profile?")) {
-                return;
+        let _pendingDeleteUrl = "";
+        let _pendingDeleteName = "";
+
+        function confirmDeleteSavedProfile(profileUrl, profileName) {
+            _pendingDeleteUrl = profileUrl;
+            _pendingDeleteName = profileName || "LinkedIn Profile";
+
+            const modal = document.getElementById("deleteProfileModal");
+            const nameEl = document.getElementById("deleteModalProfileName");
+            const urlEl = document.getElementById("deleteModalProfileUrl");
+
+            if (modal && nameEl && urlEl) {
+                nameEl.textContent = _pendingDeleteName;
+                urlEl.textContent = _pendingDeleteUrl;
+                modal.style.display = "flex";
+                const btn = document.getElementById("confirmDeleteBtn");
+                if (btn) btn.onclick = executeDeleteProfile;
+            } else {
+                const msg = `Delete Saved Profile\n\nAre you sure you want to delete '${_pendingDeleteName}'?\nURL: ${_pendingDeleteUrl}\n\nNote: This will remove the profile from your Saved Profiles list. Historical analysis records and stored activities will NOT be deleted.`;
+                if (confirm(msg)) {
+                    executeDeleteProfile();
+                }
             }
+        }
+
+        function closeDeleteModal() {
+            const modal = document.getElementById("deleteProfileModal");
+            if (modal) modal.style.display = "none";
+            _pendingDeleteUrl = "";
+            _pendingDeleteName = "";
+        }
+
+        async function executeDeleteProfile() {
+            const targetUrl = _pendingDeleteUrl;
+            const targetName = _pendingDeleteName;
+            closeDeleteModal();
+
+            if (!targetUrl) return;
 
             try {
                 const response = await fetch("/api/profiles/saved", {
                     method: "DELETE",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ url: profileUrl })
+                    body: JSON.stringify({ url: targetUrl })
                 });
 
                 if (response.ok) {
                     await loadSavedProfilesUI();
+                    showSavedProfileToast(`Profile "${targetName}" removed from saved profiles. Historical records preserved.`);
                 } else {
                     const err = await readApiJson(response, "Profile removal");
                     alert(err.error || "Failed to remove saved profile.");
                 }
             } catch (e) {
-                console.error("Failed to remove profile:", e);
+                console.error("Failed to delete profile:", e);
                 alert(e.message || "Failed to remove saved profile.");
             }
+        }
+
+        async function removeSavedProfile(profileUrl) {
+            confirmDeleteSavedProfile(profileUrl, "");
+        }
+
+        function showSavedProfileToast(msg) {
+            let toast = document.getElementById("savedProfileToast");
+            if (!toast) {
+                toast = document.createElement("div");
+                toast.id = "savedProfileToast";
+                toast.className = "saved-profile-toast";
+                document.body.appendChild(toast);
+            }
+            toast.textContent = msg;
+            toast.style.display = "flex";
+            toast.style.opacity = "1";
+            setTimeout(() => {
+                toast.style.opacity = "0";
+                setTimeout(() => { toast.style.display = "none"; }, 300);
+            }, 3500);
+        }
+
+        function copySavedProfileUrl(url, btn) {
+            if (!url) return;
+            const span = btn ? btn.querySelector("span") : null;
+            const originalText = span ? span.textContent : "Copy";
+            const onCopied = () => {
+                if (span) {
+                    span.textContent = "✓ Copied!";
+                    setTimeout(() => { span.textContent = originalText; }, 2000);
+                }
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(url).then(onCopied).catch(() => {
+                    _fallbackCopyIndex(url);
+                    onCopied();
+                });
+            } else {
+                _fallbackCopyIndex(url);
+                onCopied();
+            }
+        }
+
+        function _fallbackCopyIndex(text) {
+            const ta = document.createElement("textarea");
+            ta.value = text;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            try { document.execCommand("copy"); } catch (_) {}
+            document.body.removeChild(ta);
         }
 
         function escapeHTML(str) {
@@ -2444,6 +2634,7 @@
             let start = new Date(end);
             if (select.value === "30days") start.setDate(start.getDate() - 29);
             else if (select.value === "1year") start.setDate(start.getDate() - 364);
+            else if (select.value === "2years") start.setDate(start.getDate() - 729);
             else if (select.value === "older1year") {
                 end.setFullYear(end.getFullYear() - 1);
                 start = new Date(end);
@@ -2492,6 +2683,28 @@
             return _origHandleAnalyzeSelected();
         }
     </script>
+
+    <!-- Delete Profile Confirmation Modal (Requirement 4) -->
+    <div id="deleteProfileModal" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+        <div class="modal-content">
+            <h3 id="deleteModalTitle" style="color:#b91c1c; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+                Delete Saved Profile
+            </h3>
+            <p style="color:#334155; font-size:14px; margin-bottom:12px;">Are you sure you want to remove this profile from your Saved Profiles list?</p>
+            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin-bottom:14px; font-size:13px;">
+                <div style="font-weight:700; color:#0f172a;" id="deleteModalProfileName"></div>
+                <div style="color:#64748b; word-break:break-all; font-family:monospace; margin-top:4px;" id="deleteModalProfileUrl"></div>
+            </div>
+            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 12px; margin-bottom:18px; font-size:12px; color:#1e40af;">
+                ℹ️ <strong>Safety Guarantee:</strong> Removing this bookmark does <em>NOT</em> delete historical analysis records, activity snapshots, or imported content. Historical data remains safely preserved in MongoDB.
+            </div>
+            <div style="display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="btn-cancel-modal" onclick="closeDeleteModal()" style="padding:9px 18px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; cursor:pointer; font-weight:600; color:#475569;">Cancel</button>
+                <button type="button" id="confirmDeleteBtn" style="padding:9px 18px; border-radius:8px; border:none; background:#dc2626; color:#fff; cursor:pointer; font-weight:700;">Delete Profile</button>
+            </div>
+        </div>
+    </div>
 
 </body>
 </html>
