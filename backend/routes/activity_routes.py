@@ -18,6 +18,7 @@ from services.saved_profiles_storage import (
     get_saved_profile_by_url
 )
 from services.analysis_storage import save_latest_analysis, load_latest_analysis, load_profile_successful_analysis
+from services.activities_storage import save_activities_batch
 from services.imported_activities_storage import (
     save_imported_activities,
     load_imported_activities,
@@ -339,7 +340,7 @@ def resolve_linkedin_url(url: str):
     }
 
 
-def _build_history_limits_and_coverage(activities, requested_start, requested_end, verified_reg_date=None, reg_date_source=None, completeness="COMPLETE", status_type=""):
+def _build_history_limits_and_coverage(activities, requested_start, requested_end, verified_reg_date=None, reg_date_source=None, completeness="COMPLETE", status_type="", extra_stats=None):
     """
     Builds official LinkedIn activity history limits metadata and date coverage.
     Reference: https://www.linkedin.com/help/linkedin/answer/a1339548
@@ -354,6 +355,13 @@ def _build_history_limits_and_coverage(activities, requested_start, requested_en
     likes_cnt = sum(1 for a in activities if isinstance(a, dict) and a.get("type") in ("like", "reaction"))
     shares_cnt = sum(1 for a in activities if isinstance(a, dict) and a.get("type") == "share")
     videos_cnt = sum(1 for a in activities if isinstance(a, dict) and (a.get("type") == "video" or a.get("is_video") or a.get("video_url")))
+
+    extra = extra_stats or {}
+    act_discovered = extra.get("activities_discovered", len(activities))
+    act_parsed = extra.get("activities_parsed", len(activities))
+    dups_removed = extra.get("duplicates_removed", 0)
+    act_filtered = extra.get("activities_filtered", 0)
+    act_saved = extra.get("activities_saved", len(activities))
 
     # Determine registration date note (Requirement 3)
     if verified_reg_date:
@@ -378,9 +386,16 @@ def _build_history_limits_and_coverage(activities, requested_start, requested_en
 
     scanned_coverage = {
         "scanned_range": {"start": requested_start, "end": requested_end},
+        "requested_date_range": {"start": requested_start, "end": requested_end},
+        "retrieved_date_range": {"start": earliest_retrieved, "end": latest_retrieved},
         "earliest_retrieved_activity_date": earliest_retrieved,
         "latest_retrieved_activity_date": latest_retrieved,
         "earliest_observed_activity_date": earliest_retrieved,
+        "activities_discovered": act_discovered,
+        "activities_parsed": act_parsed,
+        "duplicates_removed": dups_removed,
+        "activities_filtered": act_filtered,
+        "activities_saved": act_saved,
         "category_counts": {
             "posts": posts_cnt,
             "comments": comments_cnt,
@@ -401,7 +416,14 @@ def _build_history_limits_and_coverage(activities, requested_start, requested_en
         "earliest_retrieved_activity_date": earliest_retrieved,
         "latest_retrieved_activity_date": latest_retrieved,
         "earliest_observed_activity_date": earliest_retrieved,
-        "selected_start_date": requested_start
+        "selected_start_date": requested_start,
+        "requested_date_range": {"start": requested_start, "end": requested_end},
+        "retrieved_date_range": {"start": earliest_retrieved, "end": latest_retrieved},
+        "activities_discovered": act_discovered,
+        "activities_parsed": act_parsed,
+        "duplicates_removed": dups_removed,
+        "activities_filtered": act_filtered,
+        "activities_saved": act_saved
     }
 
 
@@ -838,7 +860,8 @@ def analyze():
                 verified_reg_date=p_reg_date,
                 reg_date_source=p_reg_source,
                 completeness=p_status_tracker.get("retrieval_completeness", "COMPLETE"),
-                status_type=p_status_tracker.get("status_type", "")
+                status_type=p_status_tracker.get("status_type", ""),
+                extra_stats=p_status_tracker
             )
             p_analysis.update(p_history_meta)
 
@@ -917,6 +940,7 @@ def analyze():
         complete_stage(run_id, 8, items_count=len(all_activities), details=f"{len(all_activities)} unique activities")
 
         start_stage(run_id, 9, "Persisting batch analysis to MongoDB and JSON")
+        save_activities_batch(all_activities)
         save_latest_analysis(combined_result)
         session.pop("latest_analysis", None)
         complete_stage(run_id, 9, details="Stored successfully in MongoDB")
@@ -1169,7 +1193,8 @@ def analyze():
         verified_reg_date=verified_reg_date,
         reg_date_source=reg_date_source,
         completeness=status_tracker.get("retrieval_completeness", "COMPLETE" if (raw_activities and len(raw_activities) > 0) else "UNAVAILABLE"),
-        status_type=status_tracker.get("status_type", "")
+        status_type=status_tracker.get("status_type", ""),
+        extra_stats=status_tracker
     )
     result.update(history_meta)
 
@@ -1204,6 +1229,12 @@ def analyze():
         "picture": target_picture,
         "date_range": result.get("date_range"),
         "requested_date_range": {"start": start_date, "end": end_date},
+        "retrieved_date_range": {"start": history_meta["earliest_retrieved_activity_date"], "end": history_meta["latest_retrieved_activity_date"]},
+        "activities_discovered": status_tracker.get("activities_discovered", len(raw_activities)),
+        "activities_parsed": status_tracker.get("activities_parsed", len(raw_activities)),
+        "duplicates_removed": status_tracker.get("duplicates_removed", 0),
+        "activities_filtered": status_tracker.get("activities_filtered", max(0, len(raw_activities) - len(result.get("activities", [])))),
+        "activities_saved": len(result.get("activities", [])),
         "total_activities": result.get("total_activities", 0),
         "by_type": result.get("by_type", {}),
         "posts_count": result.get("posts_count", 0),
@@ -1240,11 +1271,18 @@ def analyze():
     result["is_multi_profile"] = False
     result["profiles_count"] = 1
     result["requested_date_range"] = {"start": start_date, "end": end_date}
+    result["retrieved_date_range"] = {"start": history_meta["earliest_retrieved_activity_date"], "end": history_meta["latest_retrieved_activity_date"]}
+    result["activities_discovered"] = status_tracker.get("activities_discovered", len(raw_activities))
+    result["activities_parsed"] = status_tracker.get("activities_parsed", len(raw_activities))
+    result["duplicates_removed"] = status_tracker.get("duplicates_removed", 0)
+    result["activities_filtered"] = status_tracker.get("activities_filtered", max(0, len(raw_activities) - len(result.get("activities", []))))
+    result["activities_saved"] = len(result.get("activities", []))
     result["picture"] = target_picture
     result["filtered_activity_types"] = kinds
     result["profile_results"] = [single_summary]
 
     start_stage(run_id, 9, "Saving latest analysis to MongoDB and JSON dual-storage")
+    save_activities_batch(result.get("activities", []))
     save_latest_analysis(result)
     session.pop("latest_analysis", None)
     complete_stage(run_id, 9, details="Stored successfully in MongoDB")

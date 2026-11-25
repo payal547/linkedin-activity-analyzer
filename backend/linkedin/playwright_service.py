@@ -43,16 +43,57 @@ USER_DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "playwright_co
 class ScrapeResult(tuple):
     """
     Subclass of tuple (success, activities, message) for 100% backward-compatibility
-    with 3-element tuple unpacking, while providing typed status_type and retrieval_completeness attributes.
+    with 3-element tuple unpacking, while providing typed status_type, retrieval_completeness,
+    and granular activity tracking attributes.
     """
-    def __new__(cls, success: bool, activities: List[Dict[str, Any]], message: str, status_type: str = "", retrieval_completeness: str = "INCOMPLETE"):
+    def __new__(
+        cls,
+        success: bool,
+        activities: List[Dict[str, Any]],
+        message: str,
+        status_type: str = "",
+        retrieval_completeness: str = "INCOMPLETE",
+        activities_discovered: int = 0,
+        activities_parsed: int = 0,
+        duplicates_removed: int = 0,
+        activities_filtered: int = 0,
+        activities_saved: int = 0,
+        earliest_retrieved_date: Optional[str] = None,
+        latest_retrieved_date: Optional[str] = None,
+        requested_date_range: Optional[Dict[str, Any]] = None,
+        retrieved_date_range: Optional[Dict[str, Any]] = None
+    ):
         instance = super().__new__(cls, (success, activities, message))
         instance.success = success
         instance.activities = activities
         instance.message = message
         instance.status_type = status_type
         instance.retrieval_completeness = retrieval_completeness
+        instance.activities_discovered = activities_discovered
+        instance.activities_parsed = activities_parsed
+        instance.duplicates_removed = duplicates_removed
+        instance.activities_filtered = activities_filtered
+        instance.activities_saved = activities_saved
+        instance.earliest_retrieved_date = earliest_retrieved_date
+        instance.latest_retrieved_date = latest_retrieved_date
+        instance.requested_date_range = requested_date_range or {}
+        instance.retrieved_date_range = retrieved_date_range or {}
         return instance
+
+
+class ExtractionResult(tuple):
+    """
+    Subclass of 3-tuple (section_count, total_elements, extracted_activities) for 100% backward compatibility
+    with callers unpacking 3 items, while providing parsed_count and duplicates_count.
+    """
+    def __new__(cls, section_count: int, total_elements: int, extracted_activities: List[Dict[str, Any]], parsed_count: int = 0, duplicates_count: int = 0):
+        obj = super().__new__(cls, (section_count, total_elements, extracted_activities))
+        obj.section_count = section_count
+        obj.total_elements = total_elements
+        obj.extracted_activities = extracted_activities
+        obj.parsed_count = parsed_count
+        obj.duplicates_count = duplicates_count
+        return obj
 
 
 # In-memory HTML cache for polite rate-limit handling (5 minute TTL)
@@ -179,10 +220,58 @@ def is_cdp_available(port: int = 9222, timeout: float = 1.0) -> bool:
     return False
 
 
+def _detect_chrome_profiles_hint() -> str:
+    """
+    Inspects Chrome's Local State to detect configured user profiles and accounts.
+    Provides helpful, actionable guidance if the user has multiple profiles.
+    NEVER logs or exposes passwords or private tokens.
+    """
+    candidate_dirs = []
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if local_app_data:
+        candidate_dirs.append(Path(local_app_data) / "Google" / "Chrome" / "User Data")
+    user_prof = os.environ.get("USERPROFILE")
+    if user_prof:
+        candidate_dirs.append(Path(user_prof) / "AppData" / "Local" / "Google" / "Chrome" / "User Data")
+    try:
+        candidate_dirs.append(Path.home() / "AppData" / "Local" / "Google" / "Chrome" / "User Data")
+    except Exception:
+        pass
+
+    for u_dir in candidate_dirs:
+        local_state_file = u_dir / "Local State"
+        if local_state_file.exists():
+            try:
+                data = json.loads(local_state_file.read_text(encoding="utf-8", errors="ignore"))
+                info_cache = data.get("profile", {}).get("info_cache", {})
+                last_used = data.get("profile", {}).get("last_used", "Default")
+                if len(info_cache) > 1:
+                    profiles_list = []
+                    for prof_dir, p_info in info_cache.items():
+                        prof_name = p_info.get("name") or prof_dir
+                        user_name = p_info.get("user_name") or ""
+                        is_active = (prof_dir == last_used)
+                        tag = " (active)" if is_active else ""
+                        if user_name:
+                            profiles_list.append(f"{prof_dir} ['{prof_name}' - {user_name}]{tag}")
+                        else:
+                            profiles_list.append(f"{prof_dir} ['{prof_name}']{tag}")
+                    profiles_str = ", ".join(profiles_list)
+                    other_dirs = [p for p in info_cache.keys() if p != last_used]
+                    hint = f"Chrome profiles detected: {profiles_str}."
+                    if other_dirs:
+                        hint += f" If your LinkedIn is logged in under another profile (e.g. {other_dirs[0]}), launch Chrome with: chrome.exe --remote-debugging-port=9222 --profile-directory=\"{other_dirs[0]}\""
+                    return hint
+            except Exception:
+                pass
+    return ""
+
+
 def find_authenticated_cdp_context(browser) -> Tuple[Optional[Any], Dict[str, Any]]:
     """
-    Inspects all contexts and existing open tabs in the CDP-connected Chrome browser
-    to find the authenticated LinkedIn session without modifying or navigating away from existing tabs.
+    Inspects all contexts, existing open tabs, and browser-level CDP cookie stores
+    in the CDP-connected Chrome browser to find the authenticated LinkedIn session
+    without modifying, reloading, or navigating away from existing tabs.
     Returns: (authenticated_context, metadata_dict)
     """
     contexts = getattr(browser, "contexts", [])
@@ -191,70 +280,172 @@ def find_authenticated_cdp_context(browser) -> Tuple[Optional[Any], Dict[str, An
         "total_contexts": len(contexts),
         "has_active_tab": False,
         "active_tab_url": None,
+        "active_tab_title": None,
         "has_li_at": False,
-        "total_tabs": sum(len(getattr(c, "pages", [])) for c in contexts)
+        "cookie_source": None,
+        "total_tabs": sum(len(getattr(c, "pages", [])) for c in contexts),
+        "tab_urls": []
     }
     if not contexts:
         return None, meta
 
+    # Collect tab URLs across all contexts for diagnostics
+    for idx, ctx in enumerate(contexts):
+        for p in getattr(ctx, "pages", []):
+            try:
+                p_url = getattr(p, "url", "") or ""
+                p_title = ""
+                try:
+                    p_title = p.title()
+                except Exception:
+                    pass
+                meta["tab_urls"].append({"context": idx, "url": p_url, "title": p_title})
+            except Exception:
+                pass
+
     best_context = None
 
+    # Step 1: Check existing open tabs across all contexts for active LinkedIn tabs
     for idx, ctx in enumerate(contexts):
         pages = getattr(ctx, "pages", [])
-        active_linkedin_tab = None
-
-        # 1. Inspect existing open tabs without navigating or reloading
         for p in pages:
             try:
                 p_url = (getattr(p, "url", "") or "").lower()
                 if "linkedin.com" in p_url:
-                    # Check if tab is on an authenticated page (not login, signup, authwall, or checkpoint)
                     if not any(x in p_url for x in ("login", "signup", "authwall", "checkpoint", "uas/login")):
-                        active_linkedin_tab = p
+                        meta["context_index"] = idx
+                        meta["has_active_tab"] = True
+                        meta["active_tab_url"] = getattr(p, "url", None)
+                        try:
+                            meta["active_tab_title"] = p.title()
+                        except Exception:
+                            pass
+                        best_context = ctx
                         break
             except Exception:
                 pass
+        if meta["has_active_tab"]:
+            break
 
-        # 2. Check cookies in this context for active li_at session cookie
-        has_li_at = False
-        try:
-            cookies = []
+    # Step 2: Query cookies using browser-level CDP session (bypasses page origin isolation)
+    browser_has_li_at = False
+    try:
+        if hasattr(browser, "new_browser_cdp_session"):
+            cdp_b = browser.new_browser_cdp_session()
+            # 2a. Storage.getCookies returns all cookies in the browser profile
             try:
-                cookies = ctx.cookies(["https://www.linkedin.com", "https://linkedin.com"])
-            except Exception:
-                pass
-            if not cookies:
+                storage_res = cdp_b.send("Storage.getCookies")
+                raw_cookies = storage_res.get("cookies") if isinstance(storage_res, dict) else []
+                if isinstance(raw_cookies, list):
+                    for c in raw_cookies:
+                        if isinstance(c, dict) and c.get("name") == "li_at" and c.get("value"):
+                            dom = (c.get("domain") or "").lower()
+                            if "linkedin.com" in dom or not dom:
+                                exp = c.get("expires", -1)
+                                if exp <= 0 or exp > time.time():
+                                    browser_has_li_at = True
+                                    meta["cookie_source"] = "cdp_browser_storage"
+                                    break
+            except Exception as es:
+                if pw_logger:
+                    pw_logger.debug("Storage.getCookies CDP: %s", es)
+
+            # 2b. Network.getAllCookies at browser level
+            if not browser_has_li_at:
                 try:
-                    cookies = ctx.cookies()
+                    net_res = cdp_b.send("Network.getAllCookies")
+                    raw_net = net_res.get("cookies") if isinstance(net_res, dict) else []
+                    if isinstance(raw_net, list):
+                        for c in raw_net:
+                            if isinstance(c, dict) and c.get("name") == "li_at" and c.get("value"):
+                                dom = (c.get("domain") or "").lower()
+                                if "linkedin.com" in dom or not dom:
+                                    exp = c.get("expires", -1)
+                                    if exp <= 0 or exp > time.time():
+                                        browser_has_li_at = True
+                                        meta["cookie_source"] = "cdp_browser_network"
+                                        break
+                except Exception as en:
+                    if pw_logger:
+                        pw_logger.debug("Network.getAllCookies CDP: %s", en)
+    except Exception as ec:
+        if pw_logger:
+            pw_logger.debug("new_browser_cdp_session check: %s", ec)
+
+    if browser_has_li_at:
+        meta["has_li_at"] = True
+        if best_context is None and contexts:
+            best_context = contexts[0]
+            meta["context_index"] = 0
+
+    # Step 3: Check context and page-level CDP sessions if browser-level didn't find li_at
+    if not meta["has_li_at"]:
+        for idx, ctx in enumerate(contexts):
+            pages = getattr(ctx, "pages", [])
+            for p in pages:
+                try:
+                    if hasattr(ctx, "new_cdp_session"):
+                        p_cdp = ctx.new_cdp_session(p)
+                        p_res = p_cdp.send("Network.getCookies", {
+                            "urls": ["https://www.linkedin.com", "https://linkedin.com", "https://www.linkedin.com/feed/"]
+                        })
+                        p_cookies = p_res.get("cookies") if isinstance(p_res, dict) else []
+                        if isinstance(p_cookies, list):
+                            for c in p_cookies:
+                                if isinstance(c, dict) and c.get("name") == "li_at" and c.get("value"):
+                                    dom = (c.get("domain") or "").lower()
+                                    if "linkedin.com" in dom or not dom:
+                                        exp = c.get("expires", -1)
+                                        if exp <= 0 or exp > time.time():
+                                            meta["has_li_at"] = True
+                                            meta["cookie_source"] = f"cdp_page_ctx_{idx}"
+                                            best_context = ctx
+                                            meta["context_index"] = idx
+                                            break
+                            if meta["has_li_at"]:
+                                break
                 except Exception:
                     pass
-            li_at_cookie = next((c for c in cookies if c.get("name") == "li_at" and c.get("value") and ("linkedin.com" in (c.get("domain") or "").lower() or not c.get("domain"))), None)
-            if not li_at_cookie:
-                li_at_cookie = next((c for c in cookies if c.get("name") == "li_at" and c.get("value")), None)
-            if li_at_cookie:
-                expires = li_at_cookie.get("expires", -1)
-                if expires <= 0 or expires > time.time():
-                    has_li_at = True
-        except Exception:
-            pass
+            if meta["has_li_at"]:
+                break
 
-        # Prioritize contexts that have both an active LinkedIn tab and verified li_at cookie
-        if active_linkedin_tab and has_li_at:
-            best_context = ctx
-            meta["context_index"] = idx
-            meta["has_active_tab"] = True
-            meta["active_tab_url"] = getattr(active_linkedin_tab, "url", None)
-            meta["has_li_at"] = True
-            break
-        elif has_li_at and best_context is None:
-            best_context = ctx
-            meta["context_index"] = idx
-            meta["has_li_at"] = True
-        elif active_linkedin_tab and best_context is None:
-            best_context = ctx
-            meta["context_index"] = idx
-            meta["has_active_tab"] = True
-            meta["active_tab_url"] = getattr(active_linkedin_tab, "url", None)
+    # Step 4: Fallback to ctx.cookies() (for unit tests / mock contexts)
+    if not meta["has_li_at"]:
+        for idx, ctx in enumerate(contexts):
+            try:
+                cookies = []
+                try:
+                    cookies = ctx.cookies(["https://www.linkedin.com", "https://linkedin.com"])
+                except Exception:
+                    pass
+                if not cookies:
+                    try:
+                        cookies = ctx.cookies()
+                    except Exception:
+                        pass
+                if isinstance(cookies, list):
+                    li_at_cookie = next(
+                        (c for c in cookies if isinstance(c, dict) and c.get("name") == "li_at" and c.get("value") and ("linkedin.com" in (c.get("domain") or "").lower() or not c.get("domain"))),
+                        None
+                    )
+                    if not li_at_cookie:
+                        li_at_cookie = next((c for c in cookies if isinstance(c, dict) and c.get("name") == "li_at" and c.get("value")), None)
+                    if li_at_cookie:
+                        exp = li_at_cookie.get("expires", -1)
+                        if exp <= 0 or exp > time.time():
+                            meta["has_li_at"] = True
+                            meta["cookie_source"] = f"ctx_cookies_{idx}"
+                            best_context = ctx
+                            meta["context_index"] = idx
+                            break
+            except Exception:
+                pass
+
+    if not (meta["has_active_tab"] or meta["has_li_at"]):
+        best_context = None
+    elif best_context is None and contexts:
+        best_context = contexts[0]
+        meta["context_index"] = 0
 
     return best_context, meta
 
@@ -282,13 +473,25 @@ def validate_cdp_session(port: int = 9222) -> Tuple[str, bool, str]:
             if auth_ctx is not None and (meta.get("has_li_at") or meta.get("has_active_tab")):
                 details = []
                 if meta.get("has_li_at"):
-                    details.append("session cookie verified")
+                    details.append(f"session cookie verified ({meta.get('cookie_source') or 'CDP'})")
                 if meta.get("has_active_tab"):
-                    details.append("active LinkedIn tab open")
+                    tab_label = meta.get("active_tab_url") or "active tab"
+                    details.append(f"active LinkedIn tab open [{tab_label}]")
                 detail_str = ", ".join(details)
                 return "VALID", True, f"Authenticated session confirmed active via existing Chrome session (CDP, context #{meta['context_index']}, {detail_str})"
             elif meta.get("total_contexts", 0) > 0:
-                return "EXPIRED", False, f"LinkedIn is not currently logged in on the active Chrome profile (found {meta.get('total_contexts')} context(s), {meta.get('total_tabs')} tab(s))."
+                profile_hint = _detect_chrome_profiles_hint()
+                tab_summary = ""
+                if meta.get("tab_urls"):
+                    urls_short = [t.get("url", "")[:45] for t in meta.get("tab_urls")[:3] if t.get("url")]
+                    if urls_short:
+                        tab_summary = f" (open tabs: {', '.join(urls_short)})"
+                msg = f"LinkedIn is not currently logged in on the active Chrome profile (found {meta.get('total_contexts')} context(s), {meta.get('total_tabs')} tab(s){tab_summary})."
+                if profile_hint:
+                    msg += f" {profile_hint}"
+                else:
+                    msg += " Please log into LinkedIn in this Chrome window and retry."
+                return "EXPIRED", False, msg
             else:
                 return "MISSING", False, "No active browser context found in Chrome CDP."
     except Exception as e:
@@ -504,7 +707,9 @@ def check_feed_date_boundary(parsed_dates: List[date], start_date_obj: Optional[
 def _clean_text(raw_html: str) -> str:
     if not raw_html:
         return ""
-    text = re.sub(r'<[^>]+>', ' ', raw_html)
+    # Strip visually-hidden elements first to avoid duplicate text from screen-reader spans
+    cleaned = re.sub(r'<span[^>]*class="[^"]*visually-hidden[^"]*"[^>]*>.*?</span>', '', raw_html, flags=re.DOTALL)
+    text = re.sub(r'<[^>]+>', ' ', cleaned)
     text = html.unescape(text)
     return ' '.join(text.split()).strip()
 
@@ -761,6 +966,7 @@ def _extract_activities_from_public_html(
             title_m = re.search(r'<title>(.*?)(?:\s*\|\s*LinkedIn|\s*-\s*LinkedIn)</title>', page_html, re.IGNORECASE)
             if title_m:
                 real_title_name = _clean_text(title_m.group(1))
+                real_title_name = re.sub(r'(?:[’\']s\s+Activity|^Activity\s*\|\s*)', '', real_title_name, flags=re.IGNORECASE).strip()
                 if real_title_name and "login" not in real_title_name.lower():
                     target_name = real_title_name
 
@@ -783,6 +989,8 @@ def _extract_activities_from_public_html(
     extracted_activities: List[Dict[str, Any]] = []
     seen_keys = set()
     total_elements = 0
+    parsed_count = 0
+    duplicates_count = 0
 
     # Process each tab panel (Posts, Comments, Reactions)
     for panel_chunk in panels[1:]:
@@ -855,13 +1063,16 @@ def _extract_activities_from_public_html(
                 target_media_type = "video" if is_video else "post"
                 action_desc = f"{display_name} commented on {original_author}'s {target_media_type}" if (original_author and original_author != "Original Post Author") else f"{display_name} commented on a {target_media_type}"
 
+                parsed_count += 1
                 dedup_key = f"comment_{iso_date}_{comment_text[:40]}"
                 if dedup_key in seen_keys:
+                    duplicates_count += 1
                     continue
                 seen_keys.add(dedup_key)
 
+                act_uid = f"act_cmt_{clean_slug}_{abs(hash(comment_text[:60] + str(iso_date)))}"
                 extracted_activities.append({
-                    "id": f"pw_comment_{len(extracted_activities)+1}",
+                    "id": act_uid,
                     "subject_id": target_slug,
                     "subject_name": display_name,
                     "actor": display_name,
@@ -1039,17 +1250,20 @@ def _extract_activities_from_public_html(
                     action_desc = f"{display_name} posted this"
 
                 iso_date, is_exact = parse_relative_time_to_date(rel_date)
+                parsed_count += 1
                 dedup_key = clean_post_url or (post_text[:60] + action_type)
                 if dedup_key in seen_keys:
+                    duplicates_count += 1
                     i += 1
                     continue
                 seen_keys.add(dedup_key)
 
+                act_uid = f"act_post_{clean_slug}_{abs(hash((clean_post_url or post_text[:60]) + action_type))}"
                 act_headline_desc = f"{action_desc}: \"{post_text[:120]}\"" if post_text else action_desc
                 original_author = card_author or (display_name if is_own else "LinkedIn Author")
 
                 extracted_activities.append({
-                    "id": f"pw_act_{len(extracted_activities)+1}",
+                    "id": act_uid,
                     "subject_id": target_slug,
                     "subject_name": display_name,
                     "actor": display_name,
@@ -1090,12 +1304,25 @@ def _extract_activities_from_public_html(
                 i += 1
 
     # ----------------------------------------------------
-    # 3. Authenticated / Modern Feed Update Processing (.feed-shared-update-v2)
+    # 3. Authenticated / Modern Feed Update Processing
     # ----------------------------------------------------
-    if len(extracted_activities) == 0 and ("feed-shared-update-v2" in page_html or "urn:li:activity" in page_html):
-        feed_cards = re.split(r'<div[^>]*class="[^"]*(?:^|\s)feed-shared-update-v2(?:\s|")[^>]*>', page_html)
-        if len(feed_cards) <= 1:
-            feed_cards = re.split(r'<div[^>]*data-urn="urn:li:activity:[^"]*"[^>]*>', page_html)
+    if len(extracted_activities) == 0 and any(k in page_html for k in ("feed-shared-update-v2", "urn:li:activity", "feed-full-update", "profile-creator-shared-feed-update__container", "update-components-actor", "recent-activity")):
+        # Support modern LinkedIn DOM: <li class="profile-creator-shared-feed-update__container">,
+        # <div data-view-name="feed-full-update">, <div class="feed-shared-update-v2">,
+        # <li/div data-urn="urn:li:activity:...">, <li class="artdeco-list__item">
+        feed_cards = []
+        candidate_split_patterns = [
+            r'<(?:li|div)[^>]*class="[^"]*profile-creator-shared-feed-update__container[^"]*"[^>]*>',
+            r'<(?:div|li)[^>]*data-view-name="feed-full-update"[^>]*>',
+            r'<(?:div|li)[^>]*class="[^"]*(?:^|\s)feed-shared-update-v2(?:\s|")[^>]*>',
+            r'<(?:div|li)[^>]*data-urn="urn:li:(?:activity|ugcPost|share):[^"]*"[^>]*>',
+            r'<li[^>]*class="[^"]*artdeco-list__item[^"]*"[^>]*>'
+        ]
+        for pat in candidate_split_patterns:
+            chunks = re.split(pat, page_html)
+            if len(chunks) > 1:
+                feed_cards = chunks
+                break
 
         if len(feed_cards) > 1:
             section_count = max(section_count, 1)
@@ -1105,33 +1332,60 @@ def _extract_activities_from_public_html(
             card_html = f_chunk
 
             # Context bar (e.g., "X reposted this", "X likes this")
-            context_m = re.search(r'class="[^"]*(?:feed-shared-update-v2__context-bar|update-components-header)[^"]*"[^>]*>(.*?)</div>', card_html, re.DOTALL)
+            context_m = re.search(r'class="[^"]*(?:feed-shared-update-v2__context-bar|update-components-header|feed-shared-header)[^"]*"[^>]*>(.*?)(?:</div>|</section>|</header>)', card_html, re.DOTALL)
+            if not context_m:
+                context_m = re.search(r'class="[^"]*update-components-header__text-view[^"]*"[^>]*>(.*?)</span>', card_html, re.DOTALL)
             context_text = _clean_text(context_m.group(1)) if context_m else ""
             c_lower = context_text.lower()
 
             # Actor & original author
-            actor_m = re.search(r'class="[^"]*(?:update-components-actor__name|feed-shared-actor__name)[^"]*"[^>]*>(.*?)</', card_html, re.DOTALL)
+            actor_m = re.search(r'class="[^"]*(?:update-components-actor__name|feed-shared-actor__name|profile-creator-shared-feed-update__actor-name)[^"]*"[^>]*>(.*?)(?:</div>|</span>|</h4>|</h3>)', card_html, re.DOTALL)
+            if not actor_m:
+                actor_m = re.search(r'<span[^>]*class="[^"]*update-components-actor__title[^"]*"[^>]*>(.*?)</span>', card_html, re.DOTALL)
             card_author = _clean_text(actor_m.group(1)) if actor_m else ""
 
-            author_hd_m = re.search(r'class="[^"]*(?:update-components-actor__description|feed-shared-actor__description)[^"]*"[^>]*>(.*?)</', card_html, re.DOTALL)
+            author_hd_m = re.search(r'class="[^"]*(?:update-components-actor__description|feed-shared-actor__description)[^"]*"[^>]*>(.*?)(?:</div>|</span>|</p>)', card_html, re.DOTALL)
             card_author_headline = _clean_text(author_hd_m.group(1)) if author_hd_m else ""
 
             author_img_m = re.search(r'class="[^"]*(?:update-components-actor__avatar-image|feed-shared-actor__avatar-image)[^"]*"[^>]*src="([^"]+)"', card_html)
+            if not author_img_m:
+                author_img_m = re.search(r'class="[^"]*(?:update-components-actor__avatar-image|feed-shared-actor__avatar-image)[^"]*"[^>]*data-delayed-url="([^"]+)"', card_html)
             card_author_photo = html.unescape(author_img_m.group(1)) if author_img_m else None
 
             # Date
-            date_m = re.search(r'class="[^"]*(?:update-components-actor__sub-description|feed-shared-actor__sub-description)[^"]*"[^>]*>(.*?)</', card_html, re.DOTALL)
-            if not date_m:
-                date_m = re.search(r'<time[^>]*>(.*?)</time>', card_html, re.DOTALL)
-            rel_date = _clean_text(date_m.group(1)) if date_m else ""
+            rel_date = ""
+            time_attr_m = re.search(r'<time[^>]*datetime="([^"]+)"', card_html)
+            if time_attr_m:
+                rel_date = time_attr_m.group(1).strip()
+            if not rel_date:
+                time_tag_m = re.search(r'<time[^>]*>(.*?)</time>', card_html, re.DOTALL)
+                if time_tag_m:
+                    rel_date = _clean_text(time_tag_m.group(1))
+            if not rel_date:
+                date_m = re.search(r'class="[^"]*(?:update-components-actor__sub-description|feed-shared-actor__sub-description)[^"]*"[^>]*>(.*?)(?:</div>|</span>|</p>)', card_html, re.DOTALL)
+                if date_m:
+                    rel_date = _clean_text(date_m.group(1))
+
+            # Clean trailing middot or "Edited"
+            if rel_date:
+                rel_date = re.sub(r'[•·]\s*(?:edited)?.*$', '', rel_date, flags=re.I).strip()
 
             # Content / description
-            text_m = re.search(r'class="[^"]*(?:feed-shared-update-v2__description|update-components-text|feed-shared-text)[^"]*"[^>]*>(.*?)</div>', card_html, re.DOTALL)
-            post_text = _clean_text(text_m.group(1)) if text_m else ""
+            post_text = ""
+            for pat in [
+                r'class="[^"]*(?:feed-shared-update-v2__description|update-components-text|feed-shared-text|feed-shared-inline-show-more-text)[^"]*"[^>]*>(.*?)</div>',
+                r'<span[^>]*class="[^"]*break-words[^"]*"[^>]*>(.*?)</span>',
+                r'class="[^"]*see-more-text[^"]*"[^>]*>(.*?)</div>'
+            ]:
+                t_m = re.search(pat, card_html, re.DOTALL)
+                if t_m:
+                    cand = _clean_text(t_m.group(1))
+                    if len(cand) > len(post_text):
+                        post_text = cand
 
             # Post URL
             post_url = None
-            urn_m = re.search(r'urn:li:activity:(\d+)', card_html)
+            urn_m = re.search(r'urn:li:(?:activity|ugcPost|share):(\d+)', card_html)
             if urn_m:
                 post_url = f"https://www.linkedin.com/feed/update/urn:li:activity:{urn_m.group(1)}/"
             else:
@@ -1147,7 +1401,9 @@ def _extract_activities_from_public_html(
             # Media / Video
             has_video_tag, video_url, video_thumbnail, video_status = _extract_video_info(card_html, clean_post_url)
             is_video = bool(has_video_tag or video_url or video_thumbnail or (video_status and video_status != "No video"))
-            img_m = re.search(r'class="[^"]*(?:feed-shared-image|update-components-image)[^"]*"[^>]*src="([^"]+)"', card_html)
+            img_m = re.search(r'class="[^"]*(?:feed-shared-image|update-components-image|feed-shared-article__image)[^"]*"[^>]*src="([^"]+)"', card_html)
+            if not img_m:
+                img_m = re.search(r'class="[^"]*(?:feed-shared-image|update-components-image|feed-shared-article__image)[^"]*"[^>]*data-delayed-url="([^"]+)"', card_html)
             media_url = html.unescape(img_m.group(1)) if img_m else None
             if not media_url and video_thumbnail:
                 media_url = video_thumbnail
@@ -1180,6 +1436,8 @@ def _extract_activities_from_public_html(
             likes_count = int(rx_m.group(1)) if rx_m else 0
             if likes_count == 0:
                 rx_count_m = re.search(r'social-details-social-counts__reactions-count[^>]*>([0-9,]+)', card_html)
+                if not rx_count_m:
+                    rx_count_m = re.search(r'class="[^"]*social-details-social-counts__reactions[^"]*"[^>]*aria-label="([0-9,]+)', card_html)
                 if rx_count_m:
                     try:
                         likes_count = int(rx_count_m.group(1).replace(',', ''))
@@ -1190,6 +1448,8 @@ def _extract_activities_from_public_html(
             comments_count = int(cm_m.group(1)) if cm_m else 0
             if comments_count == 0:
                 cm_count_m = re.search(r'social-details-social-counts__comments[^>]*>([0-9,]+)', card_html)
+                if not cm_count_m:
+                    cm_count_m = re.search(r'aria-label="([0-9,]+)\s+comment', card_html)
                 if cm_count_m:
                     try:
                         comments_count = int(cm_count_m.group(1).replace(',', ''))
@@ -1197,16 +1457,20 @@ def _extract_activities_from_public_html(
                         pass
 
             iso_date, is_exact = parse_relative_time_to_date(rel_date)
-            dedup_key = clean_post_url or (post_text[:60] + action_type)
+            parsed_count += 1
+            urn_id = urn_m.group(1) if urn_m else None
+            dedup_key = f"{action_type}_{urn_id}" if urn_id else (clean_post_url or (post_text[:60] + action_type))
             if dedup_key in seen_keys:
+                duplicates_count += 1
                 continue
             seen_keys.add(dedup_key)
 
+            act_uid = f"act_urn_{urn_id}_{action_type}" if urn_id else f"act_feed_{clean_slug}_{abs(hash((clean_post_url or post_text[:60]) + action_type))}"
             act_headline_desc = f"{action_desc}: \"{post_text[:120]}\"" if post_text else action_desc
             original_author = card_author or (display_name if is_own else "LinkedIn Author")
 
             extracted_activities.append({
-                "id": f"pw_feed_{len(extracted_activities)+1}",
+                "id": act_uid,
                 "subject_id": target_slug,
                 "subject_name": display_name,
                 "actor": display_name,
@@ -1244,7 +1508,7 @@ def _extract_activities_from_public_html(
                 "action_type": action_type
             })
 
-    return section_count, total_elements, extracted_activities
+    return ExtractionResult(section_count, total_elements, extracted_activities, parsed_count, duplicates_count)
 
 
 def scrape_linkedin_profile_activities(
@@ -1289,13 +1553,51 @@ def scrape_linkedin_profile_activities(
         if pw_logger:
             pw_logger.debug(msg)
 
-    def make_res(success: bool, acts: List[Dict[str, Any]], msg: str, st_type: str, completeness: str = "INCOMPLETE") -> ScrapeResult:
+    def make_res(
+        success: bool,
+        acts: List[Dict[str, Any]],
+        msg: str,
+        st_type: str,
+        completeness: str = "INCOMPLETE",
+        discovered: int = 0,
+        parsed: int = 0,
+        duplicates: int = 0,
+        filtered_out: int = 0,
+        earliest_date: Optional[str] = None,
+        latest_date: Optional[str] = None
+    ) -> ScrapeResult:
+        req_range = {"start": start_date, "end": end_date}
+        ret_range = {"start": earliest_date, "end": latest_date}
         if status_out is not None:
             status_out["status_type"] = st_type
             status_out["status"] = msg
             status_out["empty_message"] = msg
             status_out["retrieval_completeness"] = completeness
-        return ScrapeResult(success, acts, msg, st_type, completeness)
+            status_out["activities_discovered"] = discovered
+            status_out["activities_parsed"] = parsed
+            status_out["duplicates_removed"] = duplicates
+            status_out["activities_filtered"] = filtered_out
+            status_out["activities_saved"] = len(acts)
+            status_out["earliest_retrieved_activity_date"] = earliest_date
+            status_out["latest_retrieved_activity_date"] = latest_date
+            status_out["requested_date_range"] = req_range
+            status_out["retrieved_date_range"] = ret_range
+        return ScrapeResult(
+            success=success,
+            activities=acts,
+            message=msg,
+            status_type=st_type,
+            retrieval_completeness=completeness,
+            activities_discovered=discovered,
+            activities_parsed=parsed,
+            duplicates_removed=duplicates,
+            activities_filtered=filtered_out,
+            activities_saved=len(acts),
+            earliest_retrieved_date=earliest_date,
+            latest_retrieved_date=latest_date,
+            requested_date_range=req_range,
+            retrieved_date_range=ret_range
+        )
 
     slug = extract_slug_from_url(profile_url)
     if not slug:
@@ -1310,33 +1612,28 @@ def scrape_linkedin_profile_activities(
     is_year_history = (start_date is None) or (days_span >= 180)
     is_two_year_history = (start_date is None) or (days_span >= 365)
 
-    if max_activities and max_activities > 0:
+    has_explicit_activity_ceiling = bool(max_activities and max_activities > 0)
+    if has_explicit_activity_ceiling:
         effective_max_activities = max_activities
     else:
-        base_acts = int(os.getenv("LINKEDIN_MAX_ACTIVITIES", "200"))
-        if is_two_year_history:
-            effective_max_activities = max(base_acts, int(os.getenv("LINKEDIN_TWO_YEAR_MAX_ACTIVITIES", "1500")))
-        elif is_year_history:
-            effective_max_activities = max(base_acts, int(os.getenv("LINKEDIN_YEAR_MAX_ACTIVITIES", "600")))
-        elif is_deep_history:
-            effective_max_activities = max(base_acts, int(os.getenv("LINKEDIN_DEEP_MAX_ACTIVITIES", "400")))
-        else:
-            effective_max_activities = base_acts
+        # Avoid arbitrary fixed limits (200, 400, 600, 1500) that silently truncate high-activity profiles.
+        # Set an ultra-high safety threshold (default 50,000) strictly to prevent infinite loops.
+        effective_max_activities = int(os.getenv("LINKEDIN_MAX_ACTIVITIES_UNBOUNDED", "50000"))
 
     if max_scrolls and max_scrolls > 0:
         effective_max_scrolls = max_scrolls
     else:
         base_scrolls = int(os.getenv("LINKEDIN_MAX_SCROLLS", "15"))
         if is_two_year_history:
-            effective_max_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_TWO_YEAR_MAX_SCROLLS", "120")))
+            effective_max_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_TWO_YEAR_MAX_SCROLLS", "1000")))
         elif is_year_history:
-            effective_max_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_YEAR_MAX_SCROLLS", "45")))
+            effective_max_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_YEAR_MAX_SCROLLS", "600")))
         elif is_deep_history:
-            effective_max_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_DEEP_MAX_SCROLLS", "30")))
+            effective_max_scrolls = max(base_scrolls, int(os.getenv("LINKEDIN_DEEP_MAX_SCROLLS", "400")))
         elif days_span <= 7 and days_span > 0:
-            effective_max_scrolls = min(base_scrolls, 10)
+            effective_max_scrolls = max(base_scrolls, 60)
         else:
-            effective_max_scrolls = base_scrolls
+            effective_max_scrolls = max(base_scrolls, 200)
 
     # Check authenticated session status
     sess_status, is_auth, sess_msg = validate_session_state()
@@ -1349,10 +1646,16 @@ def scrape_linkedin_profile_activities(
         if active_run_id:
             fail_stage(active_run_id, 2, f"Authentication required: {sess_msg}")
         if sess_status == "EXPIRED":
-            msg = "LinkedIn session in your Chrome browser is expired or logged out. Please log in to LinkedIn in Chrome and retry."
+            if sess_msg and "expired" in sess_msg.lower():
+                msg = sess_msg
+            else:
+                msg = f"LinkedIn session in your Chrome browser is expired or logged out: {sess_msg}" if sess_msg else "LinkedIn session in your Chrome browser is expired or logged out. Please log in to LinkedIn in Chrome and retry."
             st_type = "SESSION_EXPIRED"
         else:
-            msg = "LinkedIn authentication is required to access profile activity. Please ensure your Google Chrome browser is open, logged into LinkedIn, and running with remote debugging enabled (--remote-debugging-port=9222)."
+            if sess_msg and "authentication is required" in sess_msg.lower():
+                msg = sess_msg
+            else:
+                msg = f"LinkedIn authentication is required to access profile activity: {sess_msg}" if sess_msg else "LinkedIn authentication is required to access profile activity. Please ensure your Google Chrome browser is open, logged into LinkedIn, and running with remote debugging enabled (--remote-debugging-port=9222)."
             st_type = "AUTH_REQUIRED"
         return make_res(False, [], msg, st_type, "UNAVAILABLE")
 
@@ -1608,7 +1911,7 @@ def scrape_linkedin_profile_activities(
 
                             # Count loaded cards
                             current_card_count = page.evaluate("""() => {
-                                return document.querySelectorAll('.profile-activity-card, .feed-shared-update-v2, .tab__panel .comment, .feed-shared-update-v2__control-menu').length;
+                                return document.querySelectorAll('.profile-activity-card, .feed-shared-update-v2, .tab__panel .comment, .feed-shared-update-v2__control-menu, [data-view-name="feed-full-update"], [data-urn*="urn:li:activity"], .profile-creator-shared-feed-update__container, li.profile-creator-shared-feed-update__container').length;
                             }""")
 
                             if current_card_count >= effective_max_activities:
@@ -1649,15 +1952,35 @@ def scrape_linkedin_profile_activities(
                             except Exception:
                                 pass
 
-                            if new_height == last_height:
+                            # Check for active loader/spinner to avoid stopping prematurely on temporary loading delays
+                            is_loading_spinner = False
+                            try:
+                                is_loading_spinner = bool(page.evaluate("""() => {
+                                    return !!document.querySelector('.artdeco-loader, .feed-shared-update-v2__loading, .feed-loading, [data-finite-scroll-loading], .scaffold-finite-scroll__loading-indicator');
+                                }"""))
+                            except Exception:
+                                pass
+
+                            if is_loading_spinner:
+                                page.wait_for_timeout(800)
+
+                            if new_height == last_height and not is_loading_spinner:
                                 stagnant_count += 1
-                                if stagnant_count >= 3:
+                                # Nudge scroll slightly to trigger IntersectionObservers
+                                try:
+                                    page.evaluate("window.scrollBy(0, -250);")
+                                    page.wait_for_timeout(150)
+                                    page.evaluate("window.scrollBy(0, 800);")
+                                except Exception:
+                                    pass
+                                if stagnant_count >= 5:
                                     reached_end_of_feed = True
-                                    dbg(f"[DEBUG] Feed end verified: page height unchanged for 3 scrolls at scroll {scroll_count}")
+                                    dbg(f"[DEBUG] Feed end verified: page height unchanged for 5 scrolls at scroll {scroll_count}")
                                     break
                             else:
-                                stagnant_count = 0
-                                last_height = new_height
+                                if new_height != last_height:
+                                    stagnant_count = 0
+                                    last_height = new_height
 
                             # Check date boundary on actual activity feed cards (throttled every 2 scrolls to optimize speed)
                             if start_date_obj and (scroll_count % 2 == 0 or stagnant_count > 0 or scroll_count >= effective_max_scrolls - 1):
@@ -1818,8 +2141,24 @@ def scrape_linkedin_profile_activities(
 
         name_m = re.search(r'<h1[^>]*top-card-layout__title[^>]*>(.*?)</h1>', page_html, re.DOTALL)
         found_name = _clean_text(name_m.group(1)) if name_m else None
+        if not found_name:
+            title_m = re.search(r'<title>(.*?)(?:\s*\|\s*LinkedIn|\s*-\s*LinkedIn)</title>', page_html, re.IGNORECASE)
+            if title_m:
+                t_clean = _clean_text(title_m.group(1))
+                t_clean = re.sub(r'(?:[’\']s\s+Activity|^Activity\s*\|\s*)', '', t_clean, flags=re.IGNORECASE).strip()
+                if t_clean and "login" not in t_clean.lower() and "profile" not in t_clean.lower():
+                    found_name = t_clean
+
         found_photo = extract_top_card_photo(page_html)
-        has_activity_sec = ("activities-tab" in page_html) or ("profile-activity-card" in page_html) or ("tab__panel" in page_html)
+        has_activity_sec = (
+            ("activities-tab" in page_html) or
+            ("profile-activity-card" in page_html) or
+            ("tab__panel" in page_html) or
+            ("feed-shared-update-v2" in page_html) or
+            ("urn:li:activity" in page_html) or
+            ("feed-full-update" in page_html) or
+            ("profile-creator-shared-feed-update__container" in page_html)
+        )
 
         dbg(f"[DEBUG] whether target profile name was found: {'yes' if found_name else 'no'} ({found_name or 'N/A'})")
         dbg(f"[DEBUG] whether target profile photo was found: {'yes' if found_photo else 'no'}")
@@ -1980,11 +2319,15 @@ def scrape_linkedin_profile_activities(
             if min_date <= start_date_obj:
                 reached_start_date_boundary = True
 
+        parsed_cnt = getattr(extracted_raw, "parsed_count", elem_count)
+        dups_cnt = getattr(extracted_raw, "duplicates_count", 0)
+        filtered_out_cnt = len(extracted_raw) - len(filtered_activities)
+
         # Calculate retrieval completeness strictly according to contract:
         # COMPLETE: genuinely covered requested date range (reached_start_date_boundary)
         # OR feed's end has been verified (reached_end_of_feed) AND activity section was accessible.
         # Reaching scroll limit, ceiling, or encounters with an inaccessible section must NEVER mean COMPLETE.
-        if hit_ceiling:
+        if hit_ceiling and has_explicit_activity_ceiling:
             retrieval_completeness = "PARTIAL_CEILING_REACHED"
         elif scroll_count >= effective_max_scrolls and not (reached_end_of_feed or reached_start_date_boundary):
             retrieval_completeness = "PARTIAL_CEILING_REACHED"
@@ -2002,7 +2345,11 @@ def scrape_linkedin_profile_activities(
                 msg = f"Successfully retrieved {len(filtered_activities)} real LinkedIn activities (retrieval ceiling reached)."
             elif retrieval_completeness == "PARTIAL_GUEST_LIMIT":
                 msg = f"Successfully retrieved {len(filtered_activities)} real LinkedIn activities (guest view limit reached)."
-            return make_res(True, filtered_activities, msg, "SUCCESS_WITH_ACTIVITIES", retrieval_completeness)
+            return make_res(
+                True, filtered_activities, msg, "SUCCESS_WITH_ACTIVITIES", retrieval_completeness,
+                discovered=elem_count, parsed=parsed_cnt, duplicates=dups_cnt, filtered_out=filtered_out_cnt,
+                earliest_date=oldest, latest_date=newest
+            )
 
         # Case 2: Activities exist on LinkedIn, but NONE match the date range or activity types
         if extracted_raw:
@@ -2016,21 +2363,35 @@ def scrape_linkedin_profile_activities(
                 dbg(f"[DEBUG] Retrieval result: No video activities found among {len(extracted_raw)} extracted activities")
                 if not is_auth:
                     return make_res(False, [], "Video activities are inaccessible in public guest mode. An authenticated session is required to access member-level video interactions.", "VIDEO_ACTIVITIES_INACCESSIBLE", "UNAVAILABLE")
-                return make_res(True, [], f"No video activities found for {display_name} in the selected period.", "NO_VIDEO_ACTIVITIES_FOUND", retrieval_completeness)
+                return make_res(
+                    True, [], f"No video activities found for {display_name} in the selected period.", "NO_VIDEO_ACTIVITIES_FOUND", retrieval_completeness,
+                    discovered=elem_count, parsed=parsed_cnt, duplicates=dups_cnt, filtered_out=filtered_out_cnt,
+                    earliest_date=oldest, latest_date=newest
+                )
 
             dbg(f"[DEBUG] Retrieval failure reason: (B) No activity exists inside selected date range [{start_date} to {end_date}]")
             range_desc = f"{start_date_obj.isoformat()} to {end_date_obj.isoformat()}" if (start_date_obj and end_date_obj) else (f"from {start_date_obj.isoformat()}" if start_date_obj else f"up to {end_date_obj.isoformat()}")
             bounds_note = f" (Profile's latest activity was on {newest})" if newest else ""
             case2_completeness = "COMPLETE" if (reached_start_date_boundary or reached_end_of_feed) else retrieval_completeness
-            return make_res(True, [], f"No activities found for selected date range ({range_desc}).{bounds_note}", "NO_ACTIVITIES_IN_RANGE", case2_completeness)
+            return make_res(
+                True, [], f"No activities found for selected date range ({range_desc}).{bounds_note}", "NO_ACTIVITIES_IN_RANGE", case2_completeness,
+                discovered=elem_count, parsed=parsed_cnt, duplicates=dups_cnt, filtered_out=filtered_out_cnt,
+                earliest_date=oldest, latest_date=newest
+            )
 
         # Case 3: Profile HTML was retrieved, but no activities found
         # Accurately distinguish missing/inaccessible activity section from a genuinely empty activity section
         if sec_count == 0 and not has_activity_sec:
             dbg("[DEBUG] Retrieval failure reason: Activity section not present in public page DOM")
-            return make_res(False, [], "LinkedIn activity section is not accessible for this profile. An authenticated session is required to view activities.", "ACTIVITY_SECTION_UNAVAILABLE", "UNAVAILABLE")
+            return make_res(
+                False, [], "LinkedIn activity section is not accessible for this profile. An authenticated session is required to view activities.", "ACTIVITY_SECTION_UNAVAILABLE", "UNAVAILABLE",
+                discovered=elem_count, parsed=parsed_cnt, duplicates=dups_cnt, filtered_out=0
+            )
 
         # Activity section was present in the DOM, but genuinely has 0 activity cards
         dbg("[DEBUG] Retrieval failure reason: (A) No public activity found")
         empty_completeness = "COMPLETE" if reached_end_of_feed else "INCOMPLETE"
-        return make_res(False, [], "No public activity found for this profile on LinkedIn.", "NO_PUBLIC_ACTIVITIES", empty_completeness)
+        return make_res(
+            False, [], "No public activity found for this profile on LinkedIn.", "NO_PUBLIC_ACTIVITIES", empty_completeness,
+            discovered=elem_count, parsed=parsed_cnt, duplicates=dups_cnt, filtered_out=0
+        )

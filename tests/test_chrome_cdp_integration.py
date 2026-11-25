@@ -204,6 +204,47 @@ class TestChromeCDPIntegration(unittest.TestCase):
         # Critical assertion: browser.close() must NEVER be called on CDP connection
         mock_browser.close.assert_not_called()
 
+    def test_find_authenticated_cdp_context_browser_cdp_storage_cookies(self):
+        """Verify find_authenticated_cdp_context detects li_at from browser-level CDP Storage.getCookies."""
+        mock_browser = MagicMock()
+        mock_cdp_session = MagicMock()
+        mock_cdp_session.send.return_value = {
+            "cookies": [{"name": "li_at", "value": "storage_token", "domain": ".linkedin.com", "expires": 9999999999}]
+        }
+        mock_browser.new_browser_cdp_session.return_value = mock_cdp_session
+
+        ctx0 = MagicMock()
+        ctx0.pages = [MagicMock(url="http://localhost:5000/activity-filter")]
+        ctx0.cookies.return_value = []
+        mock_browser.contexts = [ctx0]
+
+        best_ctx, meta = find_authenticated_cdp_context(mock_browser)
+        self.assertIs(best_ctx, ctx0)
+        self.assertTrue(meta["has_li_at"])
+        self.assertEqual(meta["cookie_source"], "cdp_browser_storage")
+
+    def test_find_authenticated_cdp_context_page_cdp_cookies(self):
+        """Verify find_authenticated_cdp_context falls back to page-level CDP Network.getCookies."""
+        mock_browser = MagicMock()
+        mock_browser.new_browser_cdp_session.side_effect = Exception("Browser CDP not supported")
+
+        ctx0 = MagicMock()
+        p0 = MagicMock(url="http://localhost:5000/dashboard")
+        ctx0.pages = [p0]
+        ctx0.cookies.return_value = []
+
+        mock_page_cdp = MagicMock()
+        mock_page_cdp.send.return_value = {
+            "cookies": [{"name": "li_at", "value": "page_token", "domain": ".linkedin.com", "expires": 9999999999}]
+        }
+        ctx0.new_cdp_session.return_value = mock_page_cdp
+        mock_browser.contexts = [ctx0]
+
+        best_ctx, meta = find_authenticated_cdp_context(mock_browser)
+        self.assertIs(best_ctx, ctx0)
+        self.assertTrue(meta["has_li_at"])
+        self.assertIn("cdp_page", meta["cookie_source"])
+
     @patch("linkedin.playwright_service.validate_session_state", return_value=("MISSING", False, "Session missing"))
     def test_scrape_fails_fast_when_unauthenticated_without_guest_fallback(self, mock_sess):
         """When not authenticated, scrape_linkedin_profile_activities must NOT fall back to guest mode."""
@@ -214,6 +255,119 @@ class TestChromeCDPIntegration(unittest.TestCase):
         self.assertEqual(res.status_type, "AUTH_REQUIRED")
         self.assertEqual(res.retrieval_completeness, "UNAVAILABLE")
         self.assertIn("authentication is required", msg.lower())
+
+    def test_extract_activities_from_modern_authenticated_li_elements(self):
+        """Verify modern LinkedIn feed items wrapped in <li class='profile-creator-shared-feed-update__container'> are extracted."""
+        from linkedin.playwright_service import _extract_activities_from_public_html
+
+        sample_html = """
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Payal Pal’s Activity | LinkedIn</title>
+        </head>
+        <body>
+            <ul class="artdeco-list">
+                <li class="profile-creator-shared-feed-update__container" data-urn="urn:li:activity:7210000000000000001">
+                    <div class="update-components-actor">
+                        <span class="update-components-actor__name"><span dir="ltr">Payal Pal</span></span>
+                        <div class="update-components-actor__sub-description">
+                            <span aria-hidden="true">2d • </span>
+                            <span class="visually-hidden">2 days ago</span>
+                        </div>
+                    </div>
+                    <div class="update-components-text">
+                        <span class="break-words">Excited to announce our new LinkedIn Activity Analyzer release!</span>
+                    </div>
+                    <div class="social-details-social-counts">
+                        <span class="social-details-social-counts__reactions-count">42</span>
+                        <span class="social-details-social-counts__comments">5</span>
+                    </div>
+                </li>
+                <li class="profile-creator-shared-feed-update__container" data-urn="urn:li:activity:7210000000000000002">
+                    <div class="update-components-header">
+                        <span class="update-components-header__text-view">Payal Pal reposted this</span>
+                    </div>
+                    <div class="update-components-actor">
+                        <span class="update-components-actor__name">Satya Nadella</span>
+                        <div class="update-components-actor__sub-description">5d • Edited</div>
+                    </div>
+                    <div class="update-components-text">
+                        <span class="break-words">AI is transforming every industry and company.</span>
+                    </div>
+                </li>
+                <li class="profile-creator-shared-feed-update__container" data-urn="urn:li:activity:7210000000000000003">
+                    <div class="update-components-actor">
+                        <span class="update-components-actor__name">Payal Pal</span>
+                        <div class="update-components-actor__sub-description">1w</div>
+                    </div>
+                    <div class="update-components-text">
+                        <span class="break-words">Check out this architectural walkthrough video!</span>
+                    </div>
+                    <div class="video-player">
+                        <video src="https://media.licdn.com/dms/video/test.mp4"></video>
+                    </div>
+                </li>
+            </ul>
+        </body>
+        </html>
+        """
+
+        sec_count, elem_count, activities = _extract_activities_from_public_html(
+            page_html=sample_html,
+            target_slug="payal-pal",
+            target_name=None
+        )
+
+        self.assertGreater(sec_count, 0)
+        self.assertEqual(len(activities), 3)
+
+        # First activity: original post
+        act1 = activities[0]
+        self.assertEqual(act1["type"], "post")
+        self.assertEqual(act1["subject_name"], "Payal Pal")
+        self.assertEqual(act1["likes"], 42)
+        self.assertEqual(act1["comments"], 5)
+        self.assertIn("Excited to announce", act1["activity_text"])
+        self.assertEqual(act1["relative_date"], "2d")
+
+        # Second activity: repost
+        act2 = activities[1]
+        self.assertEqual(act2["type"], "share")
+        self.assertEqual(act2["post_author"], "Satya Nadella")
+        self.assertEqual(act2["actor"], "Payal Pal")
+        self.assertIn("reposted", act2["text"])
+
+        # Third activity: video post
+        act3 = activities[2]
+        self.assertTrue(act3["is_video"])
+        self.assertEqual(act3["type"], "video")
+
+    def test_extract_activities_data_view_name_feed_full_update(self):
+        """Verify feed updates with data-view-name='feed-full-update' are extracted."""
+        from linkedin.playwright_service import _extract_activities_from_public_html
+
+        sample_html = """
+        <html>
+        <head><title>Activity | John Doe | LinkedIn</title></head>
+        <body>
+            <div data-view-name="feed-full-update" data-urn="urn:li:activity:7220000000000000001">
+                <span class="update-components-actor__name">John Doe</span>
+                <time datetime="2026-05-15T10:00:00.000Z">3mo</time>
+                <div class="feed-shared-update-v2__description">Building great products with user empathy.</div>
+            </div>
+        </body>
+        </html>
+        """
+
+        sec_count, elem_count, activities = _extract_activities_from_public_html(
+            page_html=sample_html,
+            target_slug="john-doe"
+        )
+        self.assertEqual(len(activities), 1)
+        self.assertEqual(activities[0]["subject_name"], "John Doe")
+        self.assertEqual(activities[0]["date"], "2026-05-15")
+        self.assertIn("Building great products", activities[0]["activity_text"])
 
 
 if __name__ == "__main__":

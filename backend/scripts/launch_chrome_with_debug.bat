@@ -27,12 +27,21 @@ if "%ERRORLEVEL%"=="0" (
 )
 
 echo.
-echo Launching Google Chrome with remote debugging on port 9222...
-start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+if not "%~1"=="" (
+    echo Launching Google Chrome with remote debugging on port 9222 (Profile: %~1)...
+    start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222 --profile-directory="%~1"
+) else (
+    echo Launching Google Chrome with remote debugging on port 9222...
+    start "" "C:\Program Files\Google\Chrome\Application\chrome.exe" --remote-debugging-port=9222
+)
 
 echo.
 echo [SUCCESS] Chrome has been launched on port 9222!
 echo You can now run your LinkedIn analysis, and Playwright will
 echo automatically reuse your existing authenticated session.
+echo.
+echo NOTE: If you use multiple Chrome profiles (e.g. Work / Personal),
+echo you can launch with a specific profile by passing its directory, e.g.:
+echo   launch_chrome_with_debug.bat "Profile 2"
 echo.
 pause

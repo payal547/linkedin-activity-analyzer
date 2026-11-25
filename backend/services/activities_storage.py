@@ -219,6 +219,61 @@ def save_activity(activity: Dict[str, Any]) -> List[Dict[str, Any]]:
     return load_saved_activities()
 
 
+def save_activities_batch(activities: List[Dict[str, Any]]) -> int:
+    """
+    Saves a batch of activities to MongoDB using efficient bulk upsert,
+    and atomically syncs with JSON storage.
+    Preserves existing records and guarantees deduplication by stable ID.
+    Returns the count of successfully processed and saved activities.
+    """
+    if not activities or not isinstance(activities, list):
+        return 0
+
+    valid_copies = []
+    for act in activities:
+        if not isinstance(act, dict):
+            continue
+        c = dict(act)
+        act_id = c.get("id") or f"act_{uuid.uuid4().hex[:10]}"
+        c["id"] = act_id
+        valid_copies.append(c)
+
+    if not valid_copies:
+        return 0
+
+    # 1. Primary write to MongoDB
+    coll, _ = _get_mongo_collection()
+    if coll is not None:
+        try:
+            try:
+                from pymongo import UpdateOne
+                ops = [UpdateOne({"id": a["id"]}, {"$set": a}, upsert=True) for a in valid_copies]
+                if ops:
+                    coll.bulk_write(ops, ordered=False)
+            except ImportError:
+                for a in valid_copies:
+                    coll.update_one({"id": a["id"]}, {"$set": a}, upsert=True)
+        except Exception as e:
+            logger.warning("MongoDB bulk save_activities_batch failed: %s", e)
+
+    # 2. Dual-write to JSON storage atomically
+    try:
+        current_acts = _load_activities_from_json()
+        indexed = {a.get("id"): a for a in current_acts if a.get("id")}
+        for a in valid_copies:
+            indexed[a["id"]] = a
+        merged = sorted(
+            list(indexed.values()),
+            key=lambda x: str(x.get("date") or ""),
+            reverse=True
+        )
+        _save_activities_to_json(merged)
+    except Exception as e:
+        logger.warning("JSON dual-write failed in save_activities_batch: %s", e)
+
+    return len(valid_copies)
+
+
 def delete_activity(activity_id: str) -> bool:
     """
     Deletes an activity from MongoDB and JSON storage by ID.

@@ -254,6 +254,10 @@ def save_profile_successful_analysis(slug_or_url: str, analysis_data: Dict[str, 
                     "start": min(valid_dates),
                     "end": max(valid_dates)
                 }
+            clean_copy["earliest_retrieved_date"] = min(valid_dates) if valid_dates else None
+            clean_copy["latest_retrieved_date"] = max(valid_dates) if valid_dates else None
+            clean_copy["retrieved_date_range"] = clean_copy.get("date_range")
+            clean_copy["activities_saved"] = len(merged_acts)
     except Exception as merge_err:
         logger.warning("Historical activity merge notice for %s: %s", slug, merge_err)
 

@@ -127,6 +127,17 @@ def get_activities_for_subject(
             status_out["status"] = pw_msg
             status_out["status_type"] = pw_status_type
             status_out["retrieval_completeness"] = pw_completeness
+
+            # Propagate granular activity tracking stats
+            for stat_key in (
+                "activities_discovered", "activities_parsed", "duplicates_removed",
+                "activities_filtered", "activities_saved", "earliest_retrieved_activity_date",
+                "latest_retrieved_activity_date", "requested_date_range", "retrieved_date_range"
+            ):
+                stat_val = getattr(scrape_res, stat_key, None)
+                if stat_val is not None and stat_key not in status_out:
+                    status_out[stat_key] = stat_val
+
             if pw_success and pw_activities:
                 return pw_activities
             if pw_success and not pw_activities:
