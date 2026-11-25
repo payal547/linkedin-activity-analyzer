@@ -182,7 +182,8 @@ class TestAnalysisConcurrencyAndStatus(unittest.TestCase):
             "html": valid_html,
             "title": "Neel Mani, PhD | LinkedIn",
             "status": 200,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "reached_end_of_feed": True
         }
 
         with patch("playwright.sync_api.sync_playwright") as mock_pw:
@@ -217,7 +218,8 @@ class TestAnalysisConcurrencyAndStatus(unittest.TestCase):
             "html": html_without_activity,
             "title": "Neel Mani, PhD | LinkedIn",
             "status": 200,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "reached_end_of_feed": True
         }
 
         status_out = {}
@@ -247,7 +249,8 @@ class TestAnalysisConcurrencyAndStatus(unittest.TestCase):
             "html": html_with_empty_activity,
             "title": "Neel Mani, PhD | LinkedIn",
             "status": 200,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "reached_end_of_feed": True
         }
 
         status_out = {}
@@ -346,13 +349,17 @@ class TestAnalysisConcurrencyAndStatus(unittest.TestCase):
             "html": "<html><body><h1 class=\"top-card-layout__title\">Neel Mani, PhD</h1></body></html>",
             "title": "Neel Mani, PhD | LinkedIn",
             "status": 200,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "reached_end_of_feed": True
         }
 
         resp = client.post("/api/analyze", json={
             "subject_url": "https://www.linkedin.com/in/neel-mani/",
             "subject_name": "Neel Mani, PhD",
-            "data_source": "real_linkedin"
+            "data_source": "real_linkedin",
+            # Without dateType the request defaults to today, and preserved history is
+            # filtered to the requested range, which would exclude these undated rows.
+            "dateType": "all"
         })
 
         self.assertEqual(resp.status_code, 200)
@@ -374,7 +381,8 @@ class TestAnalysisConcurrencyAndStatus(unittest.TestCase):
             "html": "<html><body><h1 class=\"top-card-layout__title\">Neel Mani, PhD</h1></body></html>",
             "title": "Neel Mani, PhD | LinkedIn",
             "status": 200,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "reached_end_of_feed": True
         }
 
         resp = client.post("/api/analyze", json={

@@ -3,7 +3,7 @@
   const state = { overview: null, profiles: [], profilePage: 1, profileTotalPages: 1, profileSort: "name", profileOrder: "asc", runPage: 1, runTotalPages: 1, metric: "activity_count", trends: [] };
   const byId = (id) => document.getElementById(id);
   const escapeHtml = (value) => String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-  const safeUrl = (value) => { try { const url = new URL(value, window.location.origin); return ["http:", "https:"].includes(url.protocol) ? url.href : ""; } catch (_) { return ""; } };
+  const safeUrl = (value) => { if (!value || typeof value !== "string") return ""; try { const url = new URL(value, window.location.origin); return ["http:", "https:"].includes(url.protocol) ? url.href : ""; } catch (_) { return ""; } };
   const count = (value) => value === null || value === undefined ? "—" : Number(value).toLocaleString();
   const asQuery = (pairs) => new URLSearchParams(Object.entries(pairs).filter(([, value]) => value !== "" && value !== null && value !== undefined)).toString();
 
@@ -70,7 +70,8 @@
 
   function renderProfiles(data) {
     const items = data.items || [];
-    const fallback = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='8' r='4' fill='%2394a3b8'/%3E%3Cpath d='M3 22c0-5 4-8 9-8s9 3 9 8' fill='%2394a3b8'/%3E%3C/svg%3E";
+    // Quotes are %27-encoded: the URI is embedded in onerror="this.src='...'" below.
+    const fallback = "data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 24 24%27%3E%3Ccircle cx=%2712%27 cy=%278%27 r=%274%27 fill=%27%2394a3b8%27/%3E%3Cpath d=%27M3 22c0-5 4-8 9-8s9 3 9 8%27 fill=%27%2394a3b8%27/%3E%3C/svg%3E";
     byId("profileRows").innerHTML = items.length ? items.map((profile) => {
       const url = safeUrl(profile.profile_url);
       const dashboard = `/dashboard?${asQuery({ subject_id: profile.id, profile_url: profile.profile_url, subject_name: profile.name })}`;

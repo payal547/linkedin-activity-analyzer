@@ -1,7 +1,9 @@
 import json
+import os
 import re
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Any, Dict
 from urllib.parse import urlparse
 from flask import Blueprint, g, jsonify, request, session
 from auth.token_store import get_access_token
@@ -50,6 +52,15 @@ def persist_analysis_run(response):
     context = getattr(g, "analysis_run_context", None)
     if not context:
         return response
+    # Validation errors return early without finishing the pipeline run; close it here
+    # so /api/pipeline/* does not report it as still in progress.
+    if response.status_code >= 400:
+        try:
+            live_run = get_pipeline_run(context["run_id"])
+            if live_run and live_run.get("status") == "running":
+                complete_pipeline_run(context["run_id"], status="failed")
+        except Exception as exc:
+            logger.warning("Could not close failed pipeline run: %s", exc)
     try:
         payload = response.get_json(silent=True) or {}
         analysis_result = context.get("analysis_result")
@@ -252,28 +263,91 @@ def _normalize_batch_date(value):
     return None, False
 
 
-def resolve_linkedin_url(url: str):
+def _slug_display_name(slug: str) -> str:
+    clean_slug = re.sub(r'[-_]\d+$', '', slug or "")
+    return clean_slug.replace('-', ' ').replace('_', ' ').strip().title() or "LinkedIn Member"
+
+
+def resolve_linkedin_url(url: str, identify: bool = True):
     """
-    Validates a LinkedIn profile URL and resolves known connection details or format clean metadata.
-    Does NOT scrape or bypass LinkedIn authentication.
-    Preserves original full URL and generates normalized canonical profile URL.
+    Works out which LinkedIn profile a pasted link points to and who that person is.
+
+    1. Recognises the link type: profile, mobile profile, bare username, post, feed
+       activity, article or lnkd.in short link (company/school/job links are rejected).
+    2. Uses details already known locally (connections, own account, saved profiles).
+    3. When the person is not known yet, or the link does not name them, opens the
+       link with the authenticated LinkedIn session to read their name, headline and
+       photo. Without a session it falls back to the username from the URL.
+
+    Returns (valid, error_message, profile_info).
     """
-    if not url or not str(url).strip():
-        return False, "Please enter a LinkedIn profile URL.", None
+    try:
+        from linkedin.link_resolver import classify_linkedin_link
+        from linkedin.playwright_service import identify_linkedin_profile
+    except ImportError:
+        from backend.linkedin.link_resolver import classify_linkedin_link
+        from backend.linkedin.playwright_service import identify_linkedin_profile
 
-    valid, err_msg, slug, canonical_url = parse_linkedin_url(url)
-    if not valid or not slug or not canonical_url:
-        return False, err_msg or "Invalid LinkedIn profile URL. Example: https://www.linkedin.com/in/username", None
+    link = classify_linkedin_link(url)
+    if not link["valid"]:
+        return False, link["error"], None
 
-    cleaned_url = url.strip()
+    slug = link["slug"]
+    live = None
+    if link["needs_lookup"]:
+        if not identify:
+            return False, f"{link['link_type_label']} does not name the profile. Paste the person's profile link instead.", None
+        live = identify_linkedin_profile(lookup_url=link["lookup_url"])
+        if not live.get("slug"):
+            return False, f"{link['link_type_label']} recognised, but its profile could not be found. {live.get('message', '')}".strip(), None
+        slug = live["slug"]
 
+    info = _lookup_known_profile(slug, f"https://www.linkedin.com/in/{slug}/", str(url).strip())
+
+    # Saved entries created from a bare URL only hold the username-derived guess.
+    known = info["identity_source"] != "url_guess" and not (
+        info["identity_source"] == "saved"
+        and not info.get("picture")
+        and info.get("headline") in (None, "", "LinkedIn Profile")
+        and info.get("name") in (_slug_display_name(slug), slug.replace("-", " ").title())
+    )
+    if identify and live is None and not known:
+        live = identify_linkedin_profile(slug=slug)
+
+    if live and live.get("ok"):
+        final_slug = live.get("slug") or slug
+        info.update({
+            "profile_url": f"https://www.linkedin.com/in/{final_slug}/",
+            "username": final_slug,
+            "name": live.get("name") or info.get("name"),
+            "headline": live.get("headline") or info.get("headline"),
+            "picture": live.get("picture") or info.get("picture"),
+            "identity_source": "linkedin",
+        })
+        if info.get("subject_id") == f"profile_{slug}":
+            info["subject_id"] = f"profile_{final_slug}"
+
+    info["link_type"] = link["link_type"]
+    info["link_type_label"] = link["link_type_label"]
+    info["identified"] = info["identity_source"] != "url_guess"
+    info["identity_status"] = (live or {}).get("status") or ("KNOWN" if known else "NOT_ATTEMPTED")
+    info["identity_message"] = (
+        (live or {}).get("message") if live
+        else ("Details loaded from your saved data." if known else "Name taken from the profile URL.")
+    )
+    return True, None, info
+
+
+def _lookup_known_profile(slug: str, canonical_url: str, cleaned_url: str) -> Dict[str, Any]:
+    """Profile details already known locally, or a username-derived placeholder."""
     # 1. Check if profile matches user's saved/imported connections
     conns = load_saved_connections()
 
     for c in conns:
         c_url = (c.get("profile_url") or "").strip()
         if extract_slug(c_url) == slug:
-            return True, None, {
+            return {
+                "identity_source": "connections",
                 "profile_url": canonical_url,
                 "original_url": cleaned_url,
                 "username": slug,
@@ -291,7 +365,8 @@ def resolve_linkedin_url(url: str):
     if user_prof and user_prof.get("name"):
         own_sub = str(user_prof.get("sub", "")).lower()
         if slug in own_sub:
-            return True, None, {
+            return {
+                "identity_source": "self",
                 "profile_url": canonical_url,
                 "original_url": cleaned_url,
                 "username": slug,
@@ -307,7 +382,8 @@ def resolve_linkedin_url(url: str):
         sp_url = (sp.get("profile_url") or "").strip()
         sp_id = (sp.get("id") or "").strip().lower()
         if extract_slug(sp_url) == slug or (sp_id and sp_id == slug):
-            return True, None, {
+            return {
+                "identity_source": "saved",
                 "profile_url": canonical_url,
                 "original_url": cleaned_url,
                 "username": slug,
@@ -323,14 +399,12 @@ def resolve_linkedin_url(url: str):
             }
 
     # 4. Derive clean human display name from URL slug
-    clean_slug = re.sub(r'[-_]\d+$', '', slug)
-    name = clean_slug.replace('-', ' ').replace('_', ' ').strip().title()
-
-    return True, None, {
+    return {
+        "identity_source": "url_guess",
         "profile_url": canonical_url,
         "original_url": cleaned_url,
         "username": slug,
-        "name": name or "LinkedIn Member",
+        "name": _slug_display_name(slug),
         "headline": "LinkedIn Profile",
         "company": None,
         "position": None,
@@ -470,7 +544,8 @@ def save_new_target_profile():
     if not url:
         return jsonify({"error": "Profile URL is required."}), 400
 
-    valid, err_msg, profile_info = resolve_linkedin_url(url)
+    # Only look the person up on LinkedIn when the caller did not supply a name.
+    valid, err_msg, profile_info = resolve_linkedin_url(url, identify=not data.get("name"))
     if not valid:
         return jsonify({"error": err_msg}), 400
 
@@ -623,12 +698,6 @@ def analyze():
 
             complete_stage(run_id, 6, items_count=len(parsed), details=f"Parsed {len(parsed)} records")
 
-            # Convert to dicts and save in server-side storage to prevent cookie overflow
-            imported = [a.to_dict() for a in parsed]
-            import_id = save_imported_activities(imported)
-            session["imported_activity_id"] = import_id
-            session.pop("imported_activities", None)
-
             filters = request.form
             kinds = [kind.lower() for kind in filters.getlist("activities")]
             if not kinds or "all" in kinds:
@@ -637,6 +706,21 @@ def analyze():
             end_date = filters.get("endDate") or None
             subject_name = filters.get("subject_name", "Imported Activity Data")
             subject_url = filters.get("subject_url")
+
+            # Convert to dicts and save in server-side storage to prevent cookie overflow.
+            # Tag rows with the profile they were uploaded for, so later analyses of
+            # other profiles never pick them up.
+            imported = [a.to_dict() for a in parsed]
+            upload_slug = extract_slug(subject_url) if subject_url else ""
+            if upload_slug:
+                for row in imported:
+                    if not row.get("subject_url") and not row.get("subject_id"):
+                        row["subject_url"] = subject_url
+                        row["subject_id"] = upload_slug
+                        row["subject_name"] = row.get("subject_name") or subject_name
+            import_id = save_imported_activities(imported)
+            session["imported_activity_id"] = import_id
+            session.pop("imported_activities", None)
 
             start_stage(run_id, 7, "Normalizing dates and applying activity filters")
             result = analyze_activities(
@@ -888,10 +972,14 @@ def analyze():
             else "COMPLETE"))
         )
 
+        # Use the bounds each profile requested, not the dates of the activities found.
+        # A profile with an open bound makes the batch bound open too.
+        req_starts = [(pr.get("requested_date_range") or {}).get("start") for pr in profile_results]
+        req_ends = [(pr.get("requested_date_range") or {}).get("end") for pr in profile_results]
         batch_history_meta = _build_history_limits_and_coverage(
             activities=all_activities,
-            requested_start=min((pr.get("date_range", {}).get("start") for pr in profile_results if pr.get("date_range", {}).get("start")), default=None),
-            requested_end=max((pr.get("date_range", {}).get("end") for pr in profile_results if pr.get("date_range", {}).get("end")), default=None),
+            requested_start=None if (not req_starts or None in req_starts) else min(req_starts),
+            requested_end=None if (not req_ends or None in req_ends) else max(req_ends),
             verified_reg_date=None,
             reg_date_source=None,
             completeness=top_completeness,
@@ -1311,6 +1399,7 @@ def get_latest_analysis():
     Never matches profile identity by display name alone (Phase 4 - Issue 1).
     """
     req_subject_id = (request.args.get("subject_id") or "").strip()
+    req_subject_name = (request.args.get("subject_name") or "").strip()
     req_profile_url = (request.args.get("profile_url") or "").strip()
     page = request.args.get("page", 1, type=int)
     per_page = request.args.get("per_page", type=int)
@@ -1323,6 +1412,7 @@ def get_latest_analysis():
         sess_prof = session.get("selected_profile") or {}
         req_profile_url = sess_prof.get("profile_url") or ""
         req_subject_id = sess_prof.get("subject_id") or ""
+        req_subject_name = req_subject_name or sess_prof.get("name") or ""
         req_slug = extract_slug(req_profile_url) or extract_slug(req_subject_id)
 
     # If a specific profile was requested, verify identity using slug or reliable ID (never display name)

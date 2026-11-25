@@ -4,29 +4,31 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Overall Analytics · LinkedIn Activity Analyzer</title>
-  <link rel="stylesheet" href="/css/analytics.css">
-  <link rel="stylesheet" href="/css/site-theme.css">
+    <link rel="stylesheet" href="/css/style.css">
+    <script src="/js/app.js" defer></script>
 </head>
 <body class="analytics-page">
-  <header class="topbar">
-    <a class="brand" href="/">LinkedIn Activity Analyzer</a>
+  <header class="topnav">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">in</span><span>Activity Analyzer</span></a>
     <nav aria-label="Main navigation">
-      <a href="/">Analyzer</a><a href="/saved-profiles">Saved Profiles</a>
-      <a href="/connections">Connections</a><a class="active" href="/analytics" aria-current="page">Analytics</a>
-      <a href="/content-library">Content Library</a>
+        <a href="/">Analyzer</a>
+        <a href="/saved-profiles">Saved profiles</a>
+        <a href="/analytics">Analytics</a>
+        <a href="/content-library">Library</a>
+        <a href="/connections">Connections</a>
     </nav>
-  </header>
+</header>
 
   <main class="page-shell">
     <section class="page-heading">
-      <div><p class="eyebrow">MONGODB RECORDS</p><h1>Overall analytics</h1>
-        <p class="muted">Explore saved profile activity and analysis runs recorded by this application.</p></div>
+      <div><p class="eyebrow">All saved profiles</p><h1>Overall analytics</h1>
+        <p class="muted">Activity and analysis runs across every profile you have saved.</p></div>
       <a class="button button-light" href="/saved-profiles">Analyze profiles</a>
     </section>
     <div id="dataNotice" class="notice" role="status" aria-live="polite">Loading actual stored records…</div>
 
     <section class="stat-grid" aria-label="Platform summary">
-      <article class="stat-card"><span>Saved profiles</span><strong id="savedProfiles">—</strong><small>MongoDB profile records</small></article>
+      <article class="stat-card"><span>Saved profiles</span><strong id="savedProfiles">—</strong><small>Profiles in your list</small></article>
       <article class="stat-card"><span>Profiles with history</span><strong id="storedProfiles">—</strong><small>Preserved successful snapshots</small></article>
       <article class="stat-card"><span>Recorded analysis runs</span><strong id="analysisRuns">—</strong><small id="runCoverage">Tracking starts with this release</small></article>
       <article class="stat-card"><span>Stored activity records</span><strong id="activityRecords">—</strong><small>Deduplicated stored event records</small></article>
@@ -40,7 +42,7 @@
     </section>
 
     <section class="panel">
-      <div class="section-heading"><div><p class="eyebrow">TREND EXPLORER</p><h2>Past 12 months</h2></div>
+      <div class="section-heading"><div><p class="eyebrow">Trend</p><h2>Past 12 months</h2></div>
         <label class="select-label">Profile <select id="trendProfile"><option value="">All profiles</option></select></label></div>
       <div class="chart-toolbar" role="group" aria-label="Choose chart metric">
         <button class="metric-button active" data-metric="activity_count">Activities</button>
@@ -53,7 +55,7 @@
     </section>
 
     <section class="panel">
-      <div class="section-heading"><div><p class="eyebrow">PROFILE COMPARISON</p><h2>Saved profiles</h2></div>
+      <div class="section-heading"><div><p class="eyebrow">Comparison</p><h2>Saved profiles</h2></div>
         <label class="search-label"><span class="sr-only">Search profiles</span><input id="profileSearch" type="search" placeholder="Search profiles"></label>
       </div>
       <div class="table-scroll"><table><thead><tr>
@@ -66,13 +68,13 @@
     </section>
 
     <section class="panel">
-      <div class="section-heading"><div><p class="eyebrow">RUN HISTORY</p><h2>Recent analysis runs</h2></div></div>
+      <div class="section-heading"><div><p class="eyebrow">History</p><h2>Recent analysis runs</h2></div></div>
       <p class="notice notice-neutral">Runs are recorded from this release forward. No earlier runs are inferred from snapshots.</p>
       <div class="table-scroll"><table><thead><tr><th>Completed</th><th>Profiles</th><th>Status</th><th>Activities</th><th>Posts</th><th>Videos</th><th>Retrieval</th></tr></thead><tbody id="runRows"><tr><td colspan="7">Loading runs…</td></tr></tbody></table></div>
       <div class="pager"><span id="runPageLabel"></span><button id="runsPrev" class="button button-light">Previous</button><button id="runsNext" class="button button-light">Next</button></div>
     </section>
 
-    <section class="panel insights-panel"><div class="section-heading"><div><p class="eyebrow">OBSERVED RECORDS</p><h2>Insights</h2></div></div><div id="insights" class="insight-grid"><p class="muted">No insights available yet.</p></div></section>
+    <section class="panel insights-panel"><div class="section-heading"><div><p class="eyebrow">From stored records</p><h2>Insights</h2></div></div><div id="insights" class="insight-grid"><p class="muted">No insights available yet.</p></div></section>
     <footer>All metrics are calculated from MongoDB records. Missing coverage is not reported as zero.</footer>
   </main>
   <div id="chartTooltip" class="chart-tooltip" role="status" hidden></div>

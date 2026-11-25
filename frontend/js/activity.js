@@ -331,10 +331,31 @@ function renderSelectedProfile() {
         headlineEl.textContent = selectedProfile.headline || "LinkedIn Profile";
     }
 
+    const photoEl = document.getElementById("profilePhotoDisplay");
+    if (photoEl) {
+        const pic = selectedProfile.picture;
+        if (typeof pic === "string" && /^https?:\/\//.test(pic)) {
+            photoEl.src = pic;
+            photoEl.alt = `${selectedProfile.name || "LinkedIn member"} profile photo`;
+            photoEl.style.display = "block";
+            photoEl.onerror = () => { photoEl.style.display = "none"; };
+        } else {
+            photoEl.style.display = "none";
+        }
+    }
+
     if (badgeEl) {
         const src = selectedProfile.source || "real_linkedin";
         badgeEl.className = "badge-source " + (src === "imported" ? "badge-imported" : "badge-real");
-        badgeEl.textContent = src === "imported" ? "Imported from LinkedIn Connections export" : "Real LinkedIn Profile";
+        if (src === "imported") {
+            badgeEl.textContent = "Imported from LinkedIn Connections export";
+        } else if (selectedProfile.identity_source === "linkedin") {
+            badgeEl.textContent = "Identified on LinkedIn";
+        } else if (selectedProfile.identity_source === "url_guess") {
+            badgeEl.textContent = "Name from URL (not verified)";
+        } else {
+            badgeEl.textContent = "Real LinkedIn Profile";
+        }
     }
 }
 

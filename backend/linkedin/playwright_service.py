@@ -12,6 +12,7 @@ import html
 import json
 import time
 import threading
+from contextlib import contextmanager
 from urllib.parse import unquote, urlparse
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -2363,6 +2364,7 @@ def scrape_linkedin_profile_activities(
                 dbg(f"[DEBUG] Retrieval result: No video activities found among {len(extracted_raw)} extracted activities")
                 if not is_auth:
                     return make_res(False, [], "Video activities are inaccessible in public guest mode. An authenticated session is required to access member-level video interactions.", "VIDEO_ACTIVITIES_INACCESSIBLE", "UNAVAILABLE")
+                display_name = target_name or found_name or slug.replace('-', ' ').title()
                 return make_res(
                     True, [], f"No video activities found for {display_name} in the selected period.", "NO_VIDEO_ACTIVITIES_FOUND", retrieval_completeness,
                     discovered=elem_count, parsed=parsed_cnt, duplicates=dups_cnt, filtered_out=filtered_out_cnt,
@@ -2395,3 +2397,266 @@ def scrape_linkedin_profile_activities(
             False, [], "No public activity found for this profile on LinkedIn.", "NO_PUBLIC_ACTIVITIES", empty_completeness,
             discovered=elem_count, parsed=parsed_cnt, duplicates=dups_cnt, filtered_out=0
         )
+
+
+# ---------------------------------------------------------------------------
+# Profile identification: who does a pasted link belong to?
+# ---------------------------------------------------------------------------
+
+_IDENTITY_CACHE: Dict[str, Dict[str, Any]] = {}
+_IDENTITY_TTL_SECONDS = 1800
+_IDENTIFY_LOCK = threading.Lock()
+
+# Logged-in and guest LinkedIn render the top card differently; try both.
+_IDENTITY_DOM_SCRIPT = r"""() => {
+    const root = document.querySelector('main') || document.body;
+    const clean = (el) => el ? el.textContent.replace(/\s+/g, ' ').trim() : null;
+    const first = (sels) => { for (const s of sels) { const el = root.querySelector(s); if (el) return el; } return null; };
+    const nameEl = first(['h1.top-card-layout__title', 'h1.text-heading-xlarge', '.pv-text-details__left-panel h1', 'h1']);
+    const headlineEl = first(['h2.top-card-layout__headline', '.top-card-layout__headline', '.pv-text-details__left-panel .text-body-medium', 'div.text-body-medium.break-words']);
+    let photo = null;
+    const img = first([
+        'img.pv-top-card-profile-picture__image--show', 'img.pv-top-card-profile-picture__image',
+        '.pv-top-card__photo img', 'img.profile-photo-edit__preview', 'img.top-card-layout__entity-image',
+        '.top-card-layout__entity-image-container img'
+    ]);
+    if (img) photo = img.currentSrc || img.getAttribute('src') || img.getAttribute('data-delayed-url');
+    return { name: clean(nameEl), headline: clean(headlineEl), photo: photo };
+}"""
+
+# On a post, activity or article page: the author's profile link.
+_AUTHOR_LINK_SCRIPT = r"""() => {
+    const sels = [
+        '.update-components-actor__meta-link', '.update-components-actor__container a[href*="/in/"]',
+        '.feed-shared-actor__container-link', '.base-main-feed-card a[data-tracking-control-name*="actor"]',
+        'a[data-tracking-control-name*="feed-actor"]', 'a[data-tracking-control-name*="author"]',
+        '.author-info a[href*="/in/"]', 'article a[href*="/in/"]', 'main a[href*="/in/"]'
+    ];
+    for (const s of sels) {
+        for (const a of document.querySelectorAll(s)) {
+            const href = a.href || a.getAttribute('href') || '';
+            if (/linkedin\.com\/in\/[^/?#]+/i.test(href) || /^\/in\/[^/?#]+/i.test(href)) return href;
+        }
+    }
+    return null;
+}"""
+
+
+def _clean_profile_title(title: str) -> Optional[str]:
+    """'(3) Satya Nadella | LinkedIn' or 'Satya Nadella - Microsoft | LinkedIn' -> 'Satya Nadella'."""
+    t = html.unescape(title or "").strip()
+    t = re.sub(r'^\(\d+\+?\)\s*', '', t)
+    t = re.sub(r'\s*\|\s*LinkedIn\s*$', '', t, flags=re.IGNORECASE)
+    t = t.split(" - ")[0].strip()
+    if not t or t.lower() in ("linkedin", "sign up", "sign in", "log in", "page not found", "profile not found"):
+        return None
+    return t
+
+
+def _meta_content(page_html: str, key: str) -> Optional[str]:
+    for pattern in (
+        r'<meta[^>]+(?:property|name)=["\']' + re.escape(key) + r'["\'][^>]+content=["\']([^"\']*)["\']',
+        r'<meta[^>]+content=["\']([^"\']*)["\'][^>]+(?:property|name)=["\']' + re.escape(key) + r'["\']',
+    ):
+        m = re.search(pattern, page_html or "", re.IGNORECASE)
+        if m:
+            value = html.unescape(m.group(1)).strip()
+            if value:
+                return value
+    return None
+
+
+def parse_profile_identity(page_html: str, page_title: str = "", final_url: str = "",
+                           dom: Optional[Dict[str, Any]] = None) -> Dict[str, Optional[str]]:
+    """
+    Builds {slug, name, headline, picture} for a loaded profile page.
+    `dom` holds values read from the live page (preferred); the HTML is the fallback.
+    """
+    dom = dom or {}
+    page_html = page_html or ""
+
+    name = (dom.get("name") or "").strip() or None
+    if not name:
+        h1 = re.search(r'<h1[^>]*>(.*?)</h1>', page_html, re.DOTALL | re.IGNORECASE)
+        name = _clean_text(h1.group(1)) if h1 else None
+    if not name:
+        name = _clean_profile_title(_meta_content(page_html, "og:title") or "") or _clean_profile_title(page_title)
+
+    headline = (dom.get("headline") or "").strip() or None
+    if not headline:
+        hd = re.search(r'<h2[^>]*top-card-layout__headline[^>]*>(.*?)</h2>', page_html, re.DOTALL | re.IGNORECASE)
+        headline = _clean_text(hd.group(1)) if hd else None
+    if not headline:
+        # Guest description: "Chairman and CEO at Microsoft · Experience: Microsoft · Location: ..."
+        desc = _meta_content(page_html, "og:description") or _meta_content(page_html, "description") or ""
+        head = desc.split(" · ")[0].strip()
+        if head and not head.lower().startswith(("experience:", "education:", "location:", "view ")) and len(head) <= 220:
+            headline = head
+
+    picture = dom.get("photo") or extract_top_card_photo(page_html)
+    if not picture:
+        og_image = _meta_content(page_html, "og:image") or ""
+        if "profile-displayphoto" in og_image or "profile-framedphoto" in og_image:
+            picture = og_image
+    if not (isinstance(picture, str) and picture.startswith(("http://", "https://"))):
+        picture = None
+
+    return {
+        "slug": extract_slug_from_url(final_url) if final_url else None,
+        "name": name,
+        "headline": headline,
+        "picture": picture,
+    }
+
+
+@contextmanager
+def _authenticated_linkedin_page(connect_timeout_ms: int = 10000):
+    """
+    Opens one new tab in the user's logged-in Chrome (CDP) or, failing that, a headless
+    browser with the saved session. Closes only that tab; never the user's browser.
+    """
+    from playwright.sync_api import sync_playwright
+    ws_endpoint = get_active_chrome_cdp_ws_url()
+    use_cdp = bool(ws_endpoint) or is_cdp_available(port=9222)
+    with sync_playwright() as p:
+        browser = None
+        page = None
+        try:
+            if use_cdp:
+                browser = p.chromium.connect_over_cdp(ws_endpoint or "http://127.0.0.1:9222", timeout=connect_timeout_ms)
+                context, _ = find_authenticated_cdp_context(browser)
+                if context is None:
+                    context = browser.contexts[0] if browser.contexts else browser.new_context()
+            else:
+                browser = p.chromium.launch(headless=True, args=["--disable-blink-features=AutomationControlled", "--no-sandbox"])
+                ctx_kwargs: Dict[str, Any] = {
+                    "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+                    "locale": "en-US",
+                    "viewport": {"width": 1440, "height": 900},
+                }
+                if SESSION_FILE.exists():
+                    ctx_kwargs["storage_state"] = str(SESSION_FILE)
+                context = browser.new_context(**ctx_kwargs)
+            page = context.new_page()
+            yield page
+        finally:
+            if page is not None:
+                try:
+                    page.close()
+                except Exception:
+                    pass
+            if browser is not None and not use_cdp:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+
+
+def identify_linkedin_profile(slug: Optional[str] = None, lookup_url: Optional[str] = None,
+                              timeout_ms: int = 15000) -> Dict[str, Any]:
+    """
+    Opens a LinkedIn link with the authenticated session and reports whose profile it is.
+    - slug: a known profile username; the profile page is opened directly.
+    - lookup_url: a post, activity, article or lnkd.in link; its author is found first.
+    Never uses guest mode (guest requests are what trigger HTTP 999).
+
+    Returns {ok, status, message, slug, profile_url, name, headline, picture}.
+    status: IDENTIFIED | AUTH_REQUIRED | RATE_LIMITED_999 | PROFILE_NOT_FOUND |
+            AUTHOR_NOT_FOUND | BLOCKED | TIMEOUT | ERROR
+    """
+    def out(ok: bool, status: str, message: str, **fields) -> Dict[str, Any]:
+        res = {"ok": ok, "status": status, "message": message, "slug": None, "profile_url": None,
+               "name": None, "headline": None, "picture": None}
+        res.update(fields)
+        if res.get("slug"):
+            res["profile_url"] = f"https://www.linkedin.com/in/{res['slug']}/"
+        return res
+
+    if not slug and not lookup_url:
+        return out(False, "ERROR", "Nothing to identify.")
+
+    if slug:
+        cached = _IDENTITY_CACHE.get(slug)
+        if cached and time.time() - cached.get("_ts", 0) < _IDENTITY_TTL_SECONDS:
+            return {k: v for k, v in cached.items() if k != "_ts"}
+
+    _, is_auth, _ = validate_session_state()
+    if not is_auth:
+        return out(False, "AUTH_REQUIRED",
+                   "Open Chrome with LinkedIn logged in (remote debugging on port 9222) to fetch the profile's name and photo.",
+                   slug=slug)
+
+    if is_rate_limited(slug or "__identify__"):
+        return out(False, "RATE_LIMITED_999", "LinkedIn is temporarily limiting requests. Try again in a few minutes.", slug=slug)
+
+    try:
+        from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+    except Exception:
+        PlaywrightTimeoutError = TimeoutError  # type: ignore
+
+    def blocked(url: str) -> bool:
+        u = (url or "").lower()
+        return any(x in u for x in ("/authwall", "/checkpoint", "/login", "/signup", "/uas/"))
+
+    try:
+        with _IDENTIFY_LOCK, _authenticated_linkedin_page() as page:
+            if lookup_url:
+                resp = page.goto(lookup_url, timeout=timeout_ms, wait_until="domcontentloaded")
+                if resp is not None and resp.status == 999:
+                    set_rate_limit("__identify__")
+                    return out(False, "RATE_LIMITED_999", "LinkedIn is temporarily limiting requests. Try again in a few minutes.")
+                if blocked(page.url):
+                    return out(False, "BLOCKED", "LinkedIn asked for a login or security check. Make sure you are logged in to LinkedIn in Chrome.")
+                slug = extract_slug_from_url(page.url)
+                if not slug:
+                    try:
+                        page.wait_for_selector('a[href*="/in/"]', timeout=5000)
+                    except Exception:
+                        pass
+                    author_href = page.evaluate(_AUTHOR_LINK_SCRIPT)
+                    if author_href and author_href.startswith("/"):
+                        author_href = "https://www.linkedin.com" + author_href
+                    slug = extract_slug_from_url(author_href or "")
+                slug = unquote(slug).lower() if slug else None
+                if not slug:
+                    return out(False, "AUTHOR_NOT_FOUND",
+                               "Couldn't find whose post this is. Open the author's profile and paste that link instead.")
+
+            resp = page.goto(f"https://www.linkedin.com/in/{slug}/", timeout=timeout_ms, wait_until="domcontentloaded")
+            status_code = resp.status if resp is not None else None
+            if status_code == 999:
+                set_rate_limit(slug)
+                return out(False, "RATE_LIMITED_999", "LinkedIn is temporarily limiting requests. Try again in a few minutes.", slug=slug)
+            if blocked(page.url):
+                return out(False, "BLOCKED", "LinkedIn asked for a login or security check. Make sure you are logged in to LinkedIn in Chrome.", slug=slug)
+            try:
+                page.wait_for_selector("h1", timeout=6000)
+            except Exception:
+                pass
+            title = page.title() or ""
+            if status_code == 404 or re.search(r'(page|profile) not found', title, re.IGNORECASE) or "/404" in (page.url or ""):
+                return out(False, "PROFILE_NOT_FOUND", "No LinkedIn profile exists at this link. Check the username.", slug=slug)
+
+            try:
+                dom = page.evaluate(_IDENTITY_DOM_SCRIPT)
+            except Exception:
+                dom = {}
+            identity = parse_profile_identity(page.content(), title, page.url, dom if isinstance(dom, dict) else {})
+    except PlaywrightTimeoutError:
+        return out(False, "TIMEOUT", "LinkedIn took too long to respond. Try again.", slug=slug)
+    except Exception as exc:
+        if pw_logger:
+            pw_logger.warning("Profile identification failed for %s: %s", slug or lookup_url, exc)
+        return out(False, "ERROR", "Couldn't open LinkedIn to identify this profile.", slug=slug)
+
+    final_slug = unquote(identity.get("slug") or slug or "").lower() or None
+    slug = (slug or "").lower() or None
+    if not identity.get("name"):
+        return out(False, "ERROR", "The profile page opened, but its name could not be read.", slug=final_slug)
+
+    result = out(True, "IDENTIFIED", f"Identified {identity['name']} on LinkedIn.", slug=final_slug,
+                 name=identity["name"], headline=identity.get("headline"), picture=identity.get("picture"))
+    _IDENTITY_CACHE[final_slug] = {**result, "_ts": time.time()}
+    if slug and slug != final_slug:
+        _IDENTITY_CACHE[slug] = _IDENTITY_CACHE[final_slug]
+    return result

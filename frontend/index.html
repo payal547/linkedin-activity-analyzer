@@ -5,1254 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LinkedIn Activity Analyzer</title>
 
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-        }
-
-        body {
-            background-color: #f3f2ef;
-            color: #191919;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .header {
-            background: #0a66c2;
-            color: white;
-            padding: 16px 40px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header h1 {
-            font-size: 20px;
-            font-weight: 700;
-        }
-
-        .header a {
-            color: white;
-            text-decoration: none;
-            font-size: 14px;
-            opacity: 0.9;
-        }
-
-        .header a:hover {
-            text-decoration: underline;
-            opacity: 1;
-        }
-
-        .main-wrapper {
-            flex: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            padding: 40px 20px;
-        }
-
-        .container {
-            width: 100%;
-            max-width: 680px;
-            background: white;
-            padding: 38px 40px;
-            border-radius: 14px;
-            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08);
-            border: 1px solid #e1e9ee;
-        }
-
-        .logo-badge {
-            display: inline-block;
-            background: #0a66c2;
-            color: white;
-            font-weight: 800;
-            font-size: 16px;
-            padding: 4px 10px;
-            border-radius: 4px;
-            margin-bottom: 12px;
-        }
-
-        h2 {
-            font-size: 26px;
-            color: #111;
-            margin-bottom: 6px;
-            font-weight: 700;
-        }
-
-        .subtitle {
-            color: #555;
-            font-size: 14px;
-            line-height: 1.5;
-            margin-bottom: 24px;
-        }
-
-        /* Authenticated Session Card */
-        .auth-session-card {
-            background: #f8fafc;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 18px 20px;
-            margin-bottom: 26px;
-            transition: all 0.2s ease;
-        }
-
-        .auth-loading-state {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            color: #475569;
-            font-size: 14px;
-        }
-
-        .spinner {
-            width: 20px;
-            height: 20px;
-            border: 3px solid #cbd5e1;
-            border-top-color: #0a66c2;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .auth-connected-state {
-            display: flex;
-            align-items: center;
-            gap: 16px;
-        }
-
-        .auth-avatar {
-            width: 62px;
-            height: 62px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 2.5px solid #057642;
-            box-shadow: 0 2px 8px rgba(5, 118, 66, 0.2);
-            background: #e2e8f0;
-            flex-shrink: 0;
-        }
-
-        .auth-account-details {
-            flex: 1;
-            text-align: left;
-        }
-
-        .auth-name-row {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 4px;
-            flex-wrap: wrap;
-        }
-
-        .auth-account-name {
-            font-size: 18px;
-            font-weight: 700;
-            color: #0f172a;
-        }
-
-        .status-badge-connected {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            background: #e6f4ea;
-            color: #137333;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 3px 9px;
-            border-radius: 12px;
-            border: 1px solid #b7e1cd;
-        }
-
-        .status-badge-disconnected {
-            display: inline-flex;
-            align-items: center;
-            gap: 5px;
-            background: #fce8e6;
-            color: #c5221f;
-            font-size: 12px;
-            font-weight: 700;
-            padding: 3px 9px;
-            border-radius: 12px;
-            border: 1px solid #fad2cf;
-        }
-
-        .pulse-dot {
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            background: #137333;
-        }
-
-        .auth-account-headline {
-            font-size: 13px;
-            color: #475569;
-            line-height: 1.4;
-        }
-
-        .auth-session-meta {
-            font-size: 11px;
-            color: #64748b;
-            margin-top: 4px;
-        }
-
-        .auth-disconnected-state {
-            text-align: left;
-        }
-
-        .auth-disconnected-title {
-            font-size: 15px;
-            font-weight: 700;
-            color: #c5221f;
-            margin-bottom: 4px;
-        }
-
-        .auth-disconnected-desc {
-            font-size: 13px;
-            color: #64748b;
-        }
-
-        /* Target Profile Section */
-        .section-separator {
-            display: flex;
-            align-items: center;
-            text-align: center;
-            margin: 22px 0 18px 0;
-            color: #94a3b8;
-            font-size: 12px;
-            font-weight: 700;
-            letter-spacing: 0.8px;
-            text-transform: uppercase;
-        }
-
-        .section-separator::before,
-        .section-separator::after {
-            content: '';
-            flex: 1;
-            border-bottom: 1px solid #e2e8f0;
-        }
-
-        .section-separator span {
-            padding: 0 12px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-            text-align: left;
-        }
-
-        label {
-            display: block;
-            margin-bottom: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            color: #333;
-        }
-
-        .input-wrapper {
-            position: relative;
-        }
-
-        .url-input {
-            width: 100%;
-            padding: 14px 16px;
-            font-size: 15px;
-            border: 1.5px solid #ccd0d5;
-            border-radius: 8px;
-            outline: none;
-            transition: all 0.15s ease;
-            background: #fafbfc;
-        }
-
-        .url-input:focus {
-            border-color: #0a66c2;
-            box-shadow: 0 0 0 3px rgba(10, 102, 194, 0.15);
-            background: white;
-        }
-
-        .btn {
-            width: 100%;
-            background: #0a66c2;
-            color: white;
-            border: none;
-            padding: 15px 24px;
-            border-radius: 8px;
-            font-size: 16px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: background 0.15s ease, transform 0.05s ease;
-        }
-
-        .btn:hover {
-            background: #004182;
-        }
-
-        .btn:active {
-            transform: scale(0.99);
-        }
-
-        .btn:disabled {
-            background: #90bce3;
-            cursor: not-allowed;
-        }
-
-        .error-message {
-            color: #c81e1e;
-            background: #fde8e8;
-            padding: 10px 14px;
-            border-radius: 6px;
-            margin-top: 14px;
-            font-size: 13px;
-            display: none;
-            text-align: left;
-        }
-
-        .status-message {
-            color: #0a66c2;
-            background: #eef3f8;
-            padding: 10px 14px;
-            border-radius: 6px;
-            margin-top: 14px;
-            font-size: 13px;
-            display: none;
-            text-align: left;
-        }
-
-        .quick-examples {
-            margin-top: 24px;
-            padding-top: 20px;
-            border-top: 1px solid #edf2f7;
-            text-align: left;
-            font-size: 13px;
-            color: #666;
-        }
-
-        .quick-examples span {
-            font-weight: 600;
-            display: block;
-            margin-bottom: 8px;
-            color: #444;
-        }
-
-        .example-chips {
-            display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
-        }
-
-        .chip {
-            background: #f1f5f9;
-            color: #0a66c2;
-            padding: 5px 10px;
-            border-radius: 14px;
-            text-decoration: none;
-            font-size: 12px;
-            cursor: pointer;
-            border: 1px solid #e2e8f0;
-            transition: all 0.15s ease;
-        }
-
-        .chip:hover {
-            background: #e2e8f0;
-            border-color: #cbd5e1;
-        }
-
-        .secondary-actions {
-            margin-top: 24px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-size: 13px;
-            color: #666;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-
-        .secondary-actions a {
-            color: #0a66c2;
-            text-decoration: none;
-            font-weight: 500;
-        }
-
-        .secondary-actions a:hover {
-            text-decoration: underline;
-        }
-
-        .privacy-note {
-            margin-top: 18px;
-            font-size: 12px;
-            color: #888;
-            line-height: 1.5;
-            text-align: center;
-        }
-
-        /* Saved Profiles Section */
-        .saved-profiles-wrapper {
-            margin-top: 26px;
-            text-align: left;
-        }
-
-        .saved-profiles-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 12px;
-        }
-
-        .saved-profiles-subtitle {
-            font-size: 13px;
-            color: #64748b;
-            font-weight: 500;
-        }
-
-        .saved-profiles-count {
-            font-size: 11px;
-            font-weight: 700;
-            color: #0a66c2;
-            background: #eef3f8;
-            padding: 3px 8px;
-            border-radius: 10px;
-        }
-
-        .saved-profiles-grid {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-        }
-
-        .saved-profiles-pagination {
-            display: none;
-            align-items: center;
-            justify-content: space-between;
-            gap: 12px;
-            margin: 14px 0 18px;
-            padding: 10px 12px;
-            border: 1px solid #dbe4ef;
-            border-radius: 12px;
-            background: #fff;
-        }
-
-        .saved-profiles-pagination button {
-            min-width: 92px;
-            padding: 8px 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 9px;
-            background: #fff;
-            color: #1e3a5f;
-            font-weight: 650;
-            cursor: pointer;
-        }
-
-        .saved-profiles-pagination button:disabled {
-            opacity: .45;
-            cursor: not-allowed;
-        }
-
-        #savedProfilesPageLabel {
-            color: #475569;
-            font-size: 13px;
-            font-weight: 600;
-            text-align: center;
-        }
-
-        /* YouTube-Style Live Top Progress Bar */
-        .yt-progress-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 3px;
-            width: 0%;
-            background: #ff0000;
-            box-shadow: 0 0 10px rgba(255, 0, 0, 0.85), 0 0 5px rgba(255, 0, 0, 0.5);
-            z-index: 999999;
-            transition: width 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.3s ease;
-            pointer-events: none;
-        }
-
-        .yt-progress-bar.indeterminate {
-            animation: ytShimmer 1.8s infinite ease-in-out;
-        }
-
-        @keyframes ytShimmer {
-            0% { opacity: 0.65; filter: brightness(1); }
-            50% { opacity: 1.0; filter: brightness(1.35); }
-            100% { opacity: 0.65; filter: brightness(1); }
-        }
-
-        .yt-progress-bar.error-bar {
-            background: #dc2626 !important;
-            box-shadow: 0 0 10px rgba(220, 38, 38, 0.9) !important;
-        }
-
-        .yt-progress-chip {
-            position: fixed;
-            top: 12px;
-            right: 20px;
-            z-index: 999998;
-            background: rgba(15, 23, 42, 0.94);
-            backdrop-filter: blur(8px);
-            color: #ffffff;
-            padding: 7px 16px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
-            border: 1px solid rgba(255, 255, 255, 0.15);
-            transition: opacity 0.3s ease;
-        }
-
-        .yt-spinner {
-            width: 13px;
-            height: 13px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-top-color: #ff0000;
-            border-radius: 50%;
-            animation: ytSpin 0.7s linear infinite;
-            flex-shrink: 0;
-        }
-
-        @keyframes ytSpin {
-            to { transform: rotate(360deg); }
-        }
-
-        .yt-chip-profile {
-            background: rgba(255, 255, 255, 0.18);
-            padding: 2px 8px;
-            border-radius: 10px;
-            font-size: 11px;
-            color: #f1f5f9;
-        }
-
-        .saved-profile-card {
-            background: #ffffff;
-            border: 1.5px solid #e2e8f0;
-            border-radius: 12px;
-            padding: 14px 16px;
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-            cursor: pointer;
-            position: relative;
-        }
-
-        .saved-profiles-batch-actions {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #f8fafc;
-            padding: 10px 16px;
-            border-radius: 8px;
-            margin-bottom: 12px;
-            border: 1.5px solid #cbd5e1;
-        }
-
-        .batch-selection-info {
-            display: flex;
-            align-items: center;
-            gap: 14px;
-        }
-
-        .select-all-label {
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 13px;
-            font-weight: 600;
-            color: #334155;
-            cursor: pointer;
-        }
-
-        .select-all-label input {
-            accent-color: #0a66c2;
-            width: 16px;
-            height: 16px;
-            cursor: pointer;
-        }
-
-        .selected-count-badge {
-            font-size: 12px;
-            font-weight: 700;
-            color: #0a66c2;
-            background: #e0f2fe;
-            padding: 3px 10px;
-            border-radius: 12px;
-            border: 1px solid #bae6fd;
-        }
-
-        /* Common Date Range Box (Directly below Select All) */
-        .saved-profiles-common-dates {
-            background: #ffffff;
-            border: 1.5px solid #cbd5e1;
-            border-radius: 10px;
-            padding: 14px 16px;
-            margin-bottom: 14px;
-        }
-
-        .common-dates-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-        }
-
-        .common-dates-title {
-            font-size: 13px;
-            font-weight: 700;
-            color: #1e293b;
-        }
-
-        .common-dates-hint {
-            font-size: 11px;
-            color: #64748b;
-        }
-
-        .common-dates-fields {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-        }
-
-        @media (max-width: 520px) {
-            .common-dates-fields {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* DD/MM/YYYY text date input (index.html common dates) */
-        .common-date-input-wrap {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .common-date-text-input {
-            width: 100%;
-            padding: 6px 36px 6px 8px;
-            font-size: 12px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            outline: none;
-            color: #1e293b;
-            background: #fafbfc;
-            font-family: inherit;
-        }
-
-        .common-date-text-input:focus {
-            border-color: #0a66c2;
-            background: white;
-        }
-
-        .common-cal-btn {
-            position: absolute;
-            right: 4px;
-            background: none;
-            border: none;
-            cursor: pointer;
-            padding: 3px 5px;
-            font-size: 14px;
-            color: #475569;
-            border-radius: 3px;
-        }
-
-        .common-cal-btn:hover {
-            background: #f1f5f9;
-            color: #0a66c2;
-        }
-
-        .common-hidden-picker {
-            position: absolute;
-            opacity: 0;
-            width: 0;
-            height: 0;
-            pointer-events: none;
-            border: 0;
-            padding: 0;
-            margin: 0;
-        }
-
-        .saved-profiles-footer-actions {
-            margin-top: 16px;
-        }
-
-        .saved-profiles-footer-actions .btn-analyze-selected {
-            width: 100%;
-            justify-content: center;
-            padding: 12px 20px;
-            font-size: 15px;
-        }
-
-        .btn-analyze-selected {
-            background: #0a66c2;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 10px 20px;
-            font-size: 14px;
-            font-weight: 700;
-            cursor: pointer;
-            transition: background 0.15s ease, transform 0.05s ease;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .btn-analyze-selected:hover {
-            background: #004182;
-        }
-
-        .btn-analyze-selected:disabled {
-            background: #94a3b8;
-            cursor: not-allowed;
-        }
-
-        .saved-profile-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 4px;
-            padding-bottom: 8px;
-            border-bottom: 1px solid #edf2f7;
-        }
-
-        .profile-select-label {
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            font-weight: 700;
-            color: #0f172a;
-            cursor: pointer;
-            user-select: none;
-        }
-
-        .profile-select-checkbox {
-            width: 18px;
-            height: 18px;
-            accent-color: #0a66c2;
-            cursor: pointer;
-        }
-
-        .saved-profile-card.selected-card {
-            border-color: #0a66c2;
-            background: #f0f7ff;
-            box-shadow: 0 0 0 2px rgba(10, 102, 194, 0.25), 0 4px 12px rgba(10, 102, 194, 0.08);
-        }
-
-        .saved-profile-card.selected-card:hover {
-            border-color: #0a66c2;
-            background: #f0f7ff;
-        }
-
-        .saved-profile-card.selected-card .saved-profile-avatar {
-            border-color: #0a66c2;
-            box-shadow: 0 0 0 2.5px rgba(10, 102, 194, 0.4);
-        }
-
-        .saved-profile-card.selected-card .saved-profile-avatar-fallback {
-            border-color: #0a66c2;
-            box-shadow: 0 0 0 2.5px rgba(10, 102, 194, 0.4);
-        }
-
-        .saved-profile-dates {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            background: #f8fafc;
-            padding: 12px;
-            border-radius: 8px;
-            border: 1px solid #e2e8f0;
-            margin: 8px 0 2px 62px;
-        }
-
-        .saved-profile-date-heading {
-            grid-column: 1 / -1;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 8px;
-            color: #334155;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .saved-profile-date-preset {
-            max-width: 155px;
-            padding: 5px 8px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            color: #334155;
-            background: #fff;
-            font: inherit;
-            font-weight: 500;
-        }
-
-        .date-field {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-            text-align: left;
-        }
-
-        .date-field label {
-            font-size: 11px;
-            font-weight: 700;
-            color: #475569;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 0;
-        }
-
-        .date-field input[type="date"] {
-            width: 100%;
-            padding: 8px 9px;
-            font-size: 13px;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            outline: none;
-            color: #1e293b;
-            background: #fafbfc;
-            font-family: inherit;
-        }
-
-        .date-field input[type="date"]:focus {
-            border-color: #0a66c2;
-            background: white;
-        }
-
-        .saved-profile-card:hover {
-            border-color: #cbd5e1;
-            background: white;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
-        }
-
-        @media (max-width: 520px) {
-            .saved-profile-dates { margin-left: 0; grid-template-columns: 1fr; }
-            .saved-profile-date-heading { grid-column: 1; }
-            .saved-profile-date-heading { align-items: flex-start; flex-direction: column; }
-        }
-
-        .saved-profile-body {
-            display: flex;
-            align-items: flex-start;
-            gap: 14px;
-        }
-
-        .saved-profile-avatar {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            object-fit: cover;
-            border: 1.5px solid #cbd5e1;
-            background: #e2e8f0;
-            flex-shrink: 0;
-        }
-
-        .saved-profile-avatar-fallback {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: #ffffff;
-            font-weight: 700;
-            font-size: 16px;
-            letter-spacing: 0.5px;
-            flex-shrink: 0;
-            user-select: none;
-            border: 1.5px solid rgba(0, 0, 0, 0.08);
-            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        }
-
-        .saved-profile-meta {
-            flex: 1;
-            min-width: 0;
-        }
-
-        .saved-profile-name {
-            font-size: 16px;
-            font-weight: 700;
-            color: #0f172a;
-        }
-
-        .saved-profile-headline {
-            font-size: 13px;
-            color: #475569;
-            margin-top: 2px;
-            line-height: 1.3;
-        }
-
-        .saved-profile-link {
-            display: inline-block;
-            font-size: 12px;
-            color: #0a66c2;
-            text-decoration: none;
-            margin-top: 4px;
-            word-break: break-all;
-        }
-
-        .saved-profile-link:hover {
-            text-decoration: underline;
-        }
-
-        .saved-profile-time {
-            font-size: 11px;
-            color: #94a3b8;
-            margin-top: 4px;
-        }
-
-        .saved-profile-actions {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border-top: 1px solid #edf2f7;
-            padding-top: 10px;
-        }
-
-        .btn-analyze-again {
-            background: #0a66c2;
-            color: white;
-            border: none;
-            border-radius: 6px;
-            padding: 7px 14px;
-            font-size: 13px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.15s ease;
-        }
-
-        .btn-analyze-again:hover {
-            background: #004182;
-        }
-
-        .btn-remove-profile {
-            background: transparent;
-            color: #64748b;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.15s ease;
-        }
-
-        .btn-remove-profile:hover {
-            background: #fee2e2;
-            color: #dc2626;
-            border-color: #fca5a5;
-        }
-
-        .btn-delete-profile {
-            background: #fff;
-            color: #b91c1c;
-            border: 1px solid #fca5a5;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .btn-delete-profile:hover {
-            background: #fee2e2;
-            color: #991b1b;
-            border-color: #f87171;
-        }
-
-        .btn-copy-url {
-            background: #f1f5f9;
-            color: #475569;
-            border: 1px solid #cbd5e1;
-            border-radius: 6px;
-            padding: 3px 8px;
-            font-size: 11px;
-            font-weight: 600;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 4px;
-            transition: all 0.15s ease;
-            vertical-align: middle;
-            margin-left: 6px;
-        }
-
-        .btn-copy-url:hover {
-            background: #e2e8f0;
-            color: #0f172a;
-        }
-
-        .saved-profile-link-wrap {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            max-width: 100%;
-            margin-top: 3px;
-        }
-
-        .saved-profile-link {
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            max-width: 250px;
-            display: inline-block;
-        }
-
-        .modal-overlay {
-            position: fixed;
-            inset: 0;
-            background: rgba(15, 23, 42, 0.6);
-            backdrop-filter: blur(2px);
-            z-index: 9999;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 16px;
-        }
-
-        .modal-content {
-            background: #fff;
-            border-radius: 14px;
-            max-width: 480px;
-            width: 100%;
-            padding: 24px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
-            border: 1px solid #e2e8f0;
-            box-sizing: border-box;
-        }
-
-        .saved-profile-toast {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            background: #0f172a;
-            color: #fff;
-            padding: 12px 20px;
-            border-radius: 10px;
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2);
-            font-size: 13px;
-            font-weight: 600;
-            z-index: 10000;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            transition: opacity 0.3s ease;
-        }
-    </style>
     <link rel="stylesheet" href="/css/style.css">
-    <link rel="stylesheet" href="/css/site-theme.css">
     <script>
         if (window.location.pathname === "/saved-profiles") {
             document.documentElement.classList.add("saved-profiles-route");
             document.title = "Saved Profiles | LinkedIn Activity Analyzer";
         }
     </script>
-    <style>
-        html.saved-profiles-route .main-wrapper {
-            align-items: flex-start;
-            min-height: calc(100vh - 72px);
-            padding: 12px clamp(12px, 2vw, 28px) 24px;
-        }
-        html.saved-profiles-route .container {
-            width: min(100%, 1440px);
-            max-width: 1440px;
-            grid-template-columns: minmax(0, 1fr);
-            row-gap: 0;
-            padding: 18px;
-            border-radius: 18px;
-        }
-        html.saved-profiles-route .logo-badge,
-        html.saved-profiles-route .landing-eyebrow,
-        html.saved-profiles-route .container > h2,
-        html.saved-profiles-route .container > .subtitle,
-        html.saved-profiles-route #authAccountCard,
-        html.saved-profiles-route .landing-insight-card,
-        html.saved-profiles-route #targetProfileSection,
-        html.saved-profiles-route .secondary-actions,
-        html.saved-profiles-route .privacy-note {
-            display: none !important;
-        }
-        html.saved-profiles-route #savedProfilesSection {
-            grid-column: 1;
-            grid-row: auto;
-            margin-top: 0;
-            padding: 14px;
-        }
-        html.saved-profiles-route .header {
-            position: sticky;
-            top: 0;
-        }
-        html.saved-profiles-route .section-separator {
-            margin: 0 0 8px;
-            font-size: 11px;
-        }
-        html.saved-profiles-route .saved-profiles-header {
-            margin-bottom: 10px;
-        }
-        html.saved-profiles-route .saved-profiles-batch-actions {
-            min-height: 42px;
-            margin-bottom: 8px;
-            padding: 6px 10px;
-        }
-        html.saved-profiles-route .saved-profiles-selection-status {
-            margin: 0 0 0 auto;
-        }
-        html.saved-profiles-route .saved-profiles-common-dates {
-            display: grid;
-            grid-template-columns: minmax(190px, 0.7fr) minmax(0, 1.8fr);
-            align-items: center;
-            gap: 12px;
-            margin-bottom: 9px;
-            padding: 10px 12px;
-        }
-        html.saved-profiles-route .common-dates-header {
-            flex-direction: column;
-            align-items: flex-start;
-            gap: 2px;
-            margin: 0;
-        }
-        html.saved-profiles-route .common-dates-fields {
-            gap: 8px;
-        }
-        html.saved-profiles-route .common-dates-fields .date-field {
-            display: grid;
-            grid-template-columns: auto minmax(110px, 1fr);
-            align-items: center;
-            gap: 8px;
-        }
-        html.saved-profiles-route .common-dates-fields .date-field label {
-            font-size: 10px;
-            white-space: nowrap;
-        }
-        html.saved-profiles-route .common-date-text-input {
-            min-height: 36px;
-        }
-        html.saved-profiles-route .saved-profiles-grid {
-            grid-template-columns: repeat(3, minmax(0, 1fr));
-            gap: 10px;
-        }
-        html.saved-profiles-route .saved-profile-card {
-            gap: 8px;
-            padding: 11px;
-        }
-        html.saved-profiles-route .saved-profile-top {
-            margin: 0;
-            padding-bottom: 7px;
-        }
-        html.saved-profiles-route .saved-profile-body {
-            gap: 9px;
-        }
-        html.saved-profiles-route :is(.saved-profile-avatar, .saved-profile-avatar-fallback) {
-            width: 42px;
-            height: 42px;
-        }
-        html.saved-profiles-route .saved-profile-name {
-            font-size: 14px;
-        }
-        html.saved-profiles-route .saved-profile-dates {
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 7px;
-            padding: 8px;
-        }
-        html.saved-profiles-route .saved-profile-date-heading {
-            min-height: 30px;
-        }
-        html.saved-profiles-route .saved-profile-date-preset {
-            min-height: 30px;
-            padding: 4px 6px;
-        }
-        html.saved-profiles-route .saved-profile-dates .common-date-text-input {
-            min-height: 34px;
-            padding-top: 6px;
-            padding-bottom: 6px;
-        }
-        html.saved-profiles-route .saved-profile-actions {
-            padding-top: 7px;
-        }
-        html.saved-profiles-route .saved-profiles-pagination {
-            margin: 9px 0 0;
-            padding: 7px 9px;
-        }
-        html.saved-profiles-route .saved-profiles-footer-actions {
-            position: sticky;
-            bottom: 8px;
-            z-index: 5;
-            margin-top: 10px;
-            padding: 8px;
-            border: 1px solid #dce8f4;
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.95);
-            box-shadow: 0 6px 22px rgba(22, 45, 78, 0.12);
-            backdrop-filter: blur(10px);
-        }
-        html.saved-profiles-route .saved-profiles-footer-actions .btn-analyze-selected {
-            min-height: 42px;
-            padding: 8px 16px;
-            font-size: 14px;
-        }
-        @media (max-width: 1100px) {
-            html.saved-profiles-route .saved-profiles-grid {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-        }
-        @media (max-width: 760px) {
-            html.saved-profiles-route .container { padding: 10px; }
-            html.saved-profiles-route #savedProfilesSection { padding: 10px; }
-            html.saved-profiles-route .saved-profiles-common-dates {
-                grid-template-columns: 1fr;
-                gap: 8px;
-            }
-            html.saved-profiles-route .common-dates-header {
-                flex-direction: row;
-                justify-content: space-between;
-                align-items: center;
-            }
-            html.saved-profiles-route .common-dates-fields .date-field {
-                grid-template-columns: 1fr;
-                gap: 4px;
-            }
-        }
-        @media (max-width: 560px) {
-            html.saved-profiles-route .saved-profiles-grid {
-                grid-template-columns: 1fr;
-            }
-            html.saved-profiles-route .saved-profile-card {
-                display: grid;
-                grid-template-columns: minmax(0, 1fr) auto;
-                gap: 8px 10px;
-            }
-            html.saved-profiles-route .saved-profile-top,
-            html.saved-profiles-route .saved-profile-body,
-            html.saved-profiles-route .saved-profile-dates,
-            html.saved-profiles-route .saved-profile-actions {
-                grid-column: 1 / -1;
-            }
-            html.saved-profiles-route .saved-profile-dates {
-                grid-template-columns: repeat(2, minmax(0, 1fr));
-            }
-            html.saved-profiles-route .saved-profile-date-heading {
-                align-items: center;
-                flex-direction: row;
-            }
-            html.saved-profiles-route .saved-profile-date-preset {
-                max-width: 145px;
-            }
-            html.saved-profiles-route .saved-profiles-header {
-                align-items: center;
-            }
-        }
-        html:not(.saved-profiles-route) #savedProfilesSection {
-            display: none !important;
-        }
-    </style>
+    <script src="/js/app.js" defer></script>
 </head>
 
 <body class="app-page landing-page">
@@ -1265,24 +25,23 @@
         <span class="yt-chip-profile" id="ytChipProfile" style="display: none;"></span>
     </div>
 
-    <header class="header">
-        <h1>LinkedIn Activity Analyzer</h1>
-        <nav>
-            <a href="/">Analyzer</a>
-            <a href="/saved-profiles">Saved Profiles</a>
-            <a href="/analytics">Analytics</a>
-            <a href="/content-library">Content Library</a>
-            <a href="/connections">Connections</a>
-        </nav>
-    </header>
+    <header class="topnav">
+    <a class="brand" href="/"><span class="brand-mark" aria-hidden="true">in</span><span>Activity Analyzer</span></a>
+    <nav aria-label="Main navigation">
+        <a href="/">Analyzer</a>
+        <a href="/saved-profiles">Saved profiles</a>
+        <a href="/analytics">Analytics</a>
+        <a href="/content-library">Library</a>
+        <a href="/connections">Connections</a>
+    </nav>
+</header>
 
     <div class="main-wrapper">
         <div class="container">
-            <span class="logo-badge">in</span>
-            <span class="landing-eyebrow">PROFILE INTELLIGENCE, MADE CLEAR</span>
-            <h2>LinkedIn Activity Analyzer</h2>
+            <span class="landing-eyebrow">Posts · Comments · Reactions · Shares</span>
+            <h2>Analyze a LinkedIn profile</h2>
             <p class="subtitle">
-                Follow public posts, comments, reactions, and shares across the profile timeline you choose.
+                Paste a profile or post link. We identify the person, then you pick a date range.
             </p>
 
             <!-- Authenticated Testing Account Status Card -->
@@ -1311,35 +70,13 @@
 
                 <!-- Disconnected State -->
                 <div id="authDisconnectedState" class="auth-disconnected-state" style="display: none;">
-                    <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
-                        <span class="status-badge-disconnected">
-                            <span>●</span>
-                            <span>LinkedIn Not Connected</span>
-                        </span>
-                    </div>
+                    <span class="status-badge-disconnected">
+                        <span class="pulse-dot"></span>
+                        <span>LinkedIn not connected</span>
+                    </span>
                     <p class="auth-disconnected-desc">Please check the saved testing session.</p>
                 </div>
             </div>
-
-            <aside class="landing-insight-card" aria-label="Analyzer overview">
-                <div class="insight-card-topline">
-                    <span class="insight-signal-dot"></span>
-                    <span>ACTIVITY AT A GLANCE</span>
-                    <span class="insight-live-label">TIMELINE</span>
-                </div>
-                <div class="insight-visual" aria-hidden="true">
-                    <span class="insight-line"></span>
-                    <i style="--bar-height: 34%"></i><i style="--bar-height: 54%"></i>
-                    <i style="--bar-height: 43%"></i><i style="--bar-height: 76%"></i>
-                    <i style="--bar-height: 61%"></i><i style="--bar-height: 92%"></i>
-                    <i style="--bar-height: 70%"></i><i style="--bar-height: 100%"></i>
-                    <i style="--bar-height: 82%"></i><i style="--bar-height: 58%"></i>
-                    <span class="insight-visual-caption">A clearer view of public activity over time</span>
-                </div>
-                <h3>Find the signal in the timeline.</h3>
-                <p>Choose a profile, set the dates that matter, and review posts and engagement in one focused workspace.</p>
-                <div class="insight-tags"><span>Posts</span><span>Reactions</span><span>Comments</span><span>Shares</span></div>
-            </aside>
 
             <!-- Target Profile Input Section -->
             <div id="targetProfileSection">
@@ -1349,13 +86,13 @@
 
                 <form onsubmit="handleAnalyzeSubmit(event)">
                     <div class="form-group">
-                        <label for="profileUrlInput">Enter Public LinkedIn Profile URL</label>
+                        <label for="profileUrlInput">Paste a LinkedIn profile or post link</label>
                         <div class="input-wrapper">
                             <input
                                 type="text"
                                 id="profileUrlInput"
                                 class="url-input"
-                                placeholder="https://www.linkedin.com/in/username/"
+                                placeholder="Profile, post, mobile or lnkd.in link"
                                 autocomplete="off"
                                 required
                             >
@@ -1371,7 +108,7 @@
                 <div id="urlStatusMsg" class="status-message"></div>
 
                 <div class="quick-examples">
-                    <span>Example profile URL formats:</span>
+                    <span>Try:</span>
                     <div class="example-chips">
                         <button type="button" class="chip" onclick="setExampleUrl('https://www.linkedin.com/in/pragyanandsaho')">
                             Pragyanand Sahoo
@@ -1449,19 +186,19 @@
                 </nav>
 
                 <!-- Multi-Profile Analysis Progress Feedback (Phase 3 - Issue 7) -->
-                <div id="multiProfileProgressCard" style="display: none; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin-bottom: 16px; box-shadow: 0 2px 6px rgba(0,0,0,0.04);">
-                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-                        <h4 style="margin:0; font-size:14px; font-weight:600; color:#1e293b;" id="multiProgressHeading">Analyzing Selected Profiles</h4>
-                        <span id="multiProgressStep" style="font-size:12px; font-weight:600; color:#0a66c2;">0 / 0</span>
+                <div id="multiProfileProgressCard" class="multi-progress-card" style="display: none;">
+                    <div class="multi-progress-head">
+                        <h4 id="multiProgressHeading">Analyzing selected profiles</h4>
+                        <span id="multiProgressStep" class="multi-progress-step">0 / 0</span>
                     </div>
-                    <div style="background:#f1f5f9; height:8px; border-radius:4px; overflow:hidden; margin-bottom:10px;">
-                        <div id="multiProgressBar" style="width:0%; height:100%; background:#0a66c2; transition:width 0.3s ease;"></div>
+                    <div class="multi-progress-track">
+                        <div id="multiProgressBar" style="width:0%;"></div>
                     </div>
-                    <p id="multiProgressStatusText" style="margin:0 0 6px 0; font-size:13px; color:#334155; font-weight:500;">Starting analysis...</p>
-                    <p id="multiProgressDetailText" style="margin:0; font-size:11.5px; color:#64748b;">Applying polite delays between requests to respect LinkedIn limits.</p>
-                    <div id="multiProgressLog" style="margin-top:12px; display:none; max-height:120px; overflow-y:auto; font-size:12px; border-top:1px solid #f1f5f9; padding-top:8px;"></div>
-                    <div id="multiProgressActions" style="margin-top:12px; display:none;">
-                        <a href="/dashboard" class="btn-analyze-selected" style="display:inline-block; text-decoration:none; padding:8px 16px; font-size:13px; text-align:center;">View Results in Dashboard →</a>
+                    <p id="multiProgressStatusText" class="multi-progress-status">Starting analysis...</p>
+                    <p id="multiProgressDetailText" class="multi-progress-detail">Applying polite delays between requests to respect LinkedIn limits.</p>
+                    <div id="multiProgressLog" class="multi-progress-log"></div>
+                    <div id="multiProgressActions" class="multi-progress-actions">
+                        <a href="/dashboard" class="btn-analyze-selected">View results in dashboard →</a>
                     </div>
                 </div>
 
@@ -1574,7 +311,11 @@
 
             if (btn) {
                 btn.disabled = true;
-                btn.textContent = "Validating Profile URL...";
+                btn.textContent = "Identifying profile...";
+            }
+            if (statusEl) {
+                statusEl.style.display = "block";
+                statusEl.textContent = "Checking the link and looking up the profile on LinkedIn. This can take a few seconds.";
             }
 
             try {
@@ -1592,7 +333,11 @@
 
                 if (statusEl) {
                     statusEl.style.display = "block";
-                    statusEl.textContent = `Profile verified: ${data.name}. Loading Activity Filter...`;
+                    const linkKind = data.link_type_label ? `${data.link_type_label} → ` : "";
+                    const headline = data.headline && data.headline !== "LinkedIn Profile" ? ` · ${data.headline}` : "";
+                    statusEl.textContent = data.identified
+                        ? `${linkKind}Profile identified: ${data.name}${headline}. Loading Activity Filter...`
+                        : `${linkKind}Profile found: ${data.name} (name from the URL). ${data.identity_message || ""} Loading Activity Filter...`;
                 }
 
                 // Store resolved TARGET profile details for Activity Filter & Dashboard
@@ -1604,10 +349,10 @@
                 localStorage.setItem("selectedSource", data.source || "real_linkedin");
                 sessionStorage.setItem("selectedProfile", JSON.stringify(data));
 
-                // Navigate directly to Step 3: Activity Filter
+                // Navigate directly to Step 3: Activity Filter (pause so the identified name can be read)
                 setTimeout(() => {
                     window.location.href = "/activity-filter";
-                }, 300);
+                }, data.identified ? 1200 : 2200);
 
             } catch (err) {
                 const isNetErr = (err instanceof TypeError && err.message &&
@@ -2687,21 +1432,16 @@
     <!-- Delete Profile Confirmation Modal (Requirement 4) -->
     <div id="deleteProfileModal" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
         <div class="modal-content">
-            <h3 id="deleteModalTitle" style="color:#b91c1c; margin-bottom:12px; display:flex; align-items:center; gap:8px;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
-                Delete Saved Profile
-            </h3>
-            <p style="color:#334155; font-size:14px; margin-bottom:12px;">Are you sure you want to remove this profile from your Saved Profiles list?</p>
-            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:12px; margin-bottom:14px; font-size:13px;">
-                <div style="font-weight:700; color:#0f172a;" id="deleteModalProfileName"></div>
-                <div style="color:#64748b; word-break:break-all; font-family:monospace; margin-top:4px;" id="deleteModalProfileUrl"></div>
+            <h3 id="deleteModalTitle">Delete saved profile?</h3>
+            <p>This removes the profile from your saved list.</p>
+            <div class="modal-detail">
+                <div id="deleteModalProfileName" style="font-weight:600;"></div>
+                <div id="deleteModalProfileUrl" class="mono"></div>
             </div>
-            <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:10px 12px; margin-bottom:18px; font-size:12px; color:#1e40af;">
-                ℹ️ <strong>Safety Guarantee:</strong> Removing this bookmark does <em>NOT</em> delete historical analysis records, activity snapshots, or imported content. Historical data remains safely preserved in MongoDB.
-            </div>
-            <div style="display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="btn-cancel-modal" onclick="closeDeleteModal()" style="padding:9px 18px; border-radius:8px; border:1px solid #cbd5e1; background:#fff; cursor:pointer; font-weight:600; color:#475569;">Cancel</button>
-                <button type="button" id="confirmDeleteBtn" style="padding:9px 18px; border-radius:8px; border:none; background:#dc2626; color:#fff; cursor:pointer; font-weight:700;">Delete Profile</button>
+            <p class="modal-note">Past analysis results, activity snapshots and imported content are kept.</p>
+            <div class="modal-actions">
+                <button type="button" class="btn-cancel-modal" onclick="closeDeleteModal()">Cancel</button>
+                <button type="button" id="confirmDeleteBtn">Delete profile</button>
             </div>
         </div>
     </div>

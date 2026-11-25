@@ -173,7 +173,8 @@ class TestPlaywright404Detection(unittest.TestCase):
             "html": valid_html,
             "title": "Neel Mani, PhD - India | Professional Profile | LinkedIn",
             "status": 200,
-            "timestamp": time.time()
+            "timestamp": time.time(),
+            "reached_end_of_feed": True
         }
 
         # Must execute cleanly without UnboundLocalError for nav_status

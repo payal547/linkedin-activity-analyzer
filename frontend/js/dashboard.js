@@ -592,15 +592,15 @@ function renderAnalysisResults(data) {
     const regNoticeEl = document.getElementById("registrationDateNotice");
 
     const reqRange = data.requested_date_range || (data.profile_results && data.profile_results[0] && data.profile_results[0].requested_date_range) || {};
-    const startStr = reqRange.start ? formatDate(reqRange.start) : "Any time";
-    const endStr = reqRange.end ? formatDate(reqRange.end) : "Present";
+    const startStr = reqRange.start ? formatDateDDMMYY(reqRange.start) : "Any time";
+    const endStr = reqRange.end ? formatDateDDMMYY(reqRange.end) : "Present";
     if (scannedEl) scannedEl.innerHTML = `<strong>Scanned Range:</strong> ${escapeHTML(startStr)} – ${escapeHTML(endStr)}`;
 
     const earliestRetrieved = data.earliest_retrieved_activity_date || (data.profile_results && data.profile_results[0] && data.profile_results[0].earliest_retrieved_activity_date);
     const latestRetrieved = data.latest_retrieved_activity_date || (data.profile_results && data.profile_results[0] && data.profile_results[0].latest_retrieved_activity_date);
     if (retrievedEl) {
         if (earliestRetrieved && latestRetrieved) {
-            retrievedEl.innerHTML = `<strong>Retrieved Range:</strong> ${escapeHTML(formatDate(earliestRetrieved))} – ${escapeHTML(formatDate(latestRetrieved))}`;
+            retrievedEl.innerHTML = `<strong>Retrieved Range:</strong> ${escapeHTML(formatDateDDMMYY(earliestRetrieved))} – ${escapeHTML(formatDateDDMMYY(latestRetrieved))}`;
         } else {
             retrievedEl.innerHTML = `<strong>Retrieved Range:</strong> <em>No dated activities retrieved</em>`;
         }
@@ -610,7 +610,7 @@ function renderAnalysisResults(data) {
     const regSource = data.registration_date_source || (data.profile_results && data.profile_results[0] && data.profile_results[0].registration_date_source);
     if (regDateEl) {
         if (verifiedReg) {
-            regDateEl.innerHTML = `<strong>Registration Date:</strong> <span style="color:#15803d; font-weight:700;">${escapeHTML(formatDate(verifiedReg))}</span> (${escapeHTML(regSource || "Verified Official Source")})`;
+            regDateEl.innerHTML = `<strong>Registration Date:</strong> <span style="color:#15803d; font-weight:700;">${escapeHTML(formatDateDDMMYY(verifiedReg))}</span> (${escapeHTML(regSource || "Verified Official Source")})`;
         } else {
             regDateEl.innerHTML = `<strong>Registration Date:</strong> <span style="color:#64748b;">Not available</span>`;
         }
