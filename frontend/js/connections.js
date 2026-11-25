@@ -152,7 +152,7 @@ async function loadConnections() {
              error.message.toLowerCase().includes("network") ||
              error.message.toLowerCase().includes("failed")));
         const displayMsg = isNetErr
-            ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
+            ? "⚠️ Could not reach the backend server. Please make sure the Flask server (python backend/app.py) is running."
             : escapeHTML(error.message);
         listEl.innerHTML = `
             <div class="message">

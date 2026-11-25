@@ -10,6 +10,7 @@ import os
 import re
 import html
 import json
+import hashlib
 import time
 import threading
 from contextlib import contextmanager
@@ -248,15 +249,12 @@ def _detect_chrome_profiles_hint() -> str:
                 last_used = data.get("profile", {}).get("last_used", "Default")
                 if len(info_cache) > 1:
                     profiles_list = []
+                    # Profile folder and display name only. Account emails are not included:
+                    # this text is shown on the dashboard and saved with the analysis.
                     for prof_dir, p_info in info_cache.items():
                         prof_name = p_info.get("name") or prof_dir
-                        user_name = p_info.get("user_name") or ""
-                        is_active = (prof_dir == last_used)
-                        tag = " (active)" if is_active else ""
-                        if user_name:
-                            profiles_list.append(f"{prof_dir} ['{prof_name}' - {user_name}]{tag}")
-                        else:
-                            profiles_list.append(f"{prof_dir} ['{prof_name}']{tag}")
+                        tag = " (active)" if prof_dir == last_used else ""
+                        profiles_list.append(f"{prof_dir} '{prof_name}'{tag}")
                     profiles_str = ", ".join(profiles_list)
                     other_dirs = [p for p in info_cache.keys() if p != last_used]
                     hint = f"Chrome profiles detected: {profiles_str}."
@@ -482,12 +480,12 @@ def validate_cdp_session(port: int = 9222) -> Tuple[str, bool, str]:
                 return "VALID", True, f"Authenticated session confirmed active via existing Chrome session (CDP, context #{meta['context_index']}, {detail_str})"
             elif meta.get("total_contexts", 0) > 0:
                 profile_hint = _detect_chrome_profiles_hint()
-                tab_summary = ""
-                if meta.get("tab_urls"):
-                    urls_short = [t.get("url", "")[:45] for t in meta.get("tab_urls")[:3] if t.get("url")]
-                    if urls_short:
-                        tab_summary = f" (open tabs: {', '.join(urls_short)})"
-                msg = f"LinkedIn is not currently logged in on the active Chrome profile (found {meta.get('total_contexts')} context(s), {meta.get('total_tabs')} tab(s){tab_summary})."
+                # Open tab URLs are browsing history: keep them in the server log only,
+                # never in the message that reaches the page and the database.
+                if pw_logger and meta.get("tab_urls"):
+                    urls_short = [t.get("url", "")[:60] for t in meta.get("tab_urls")[:5] if t.get("url")]
+                    pw_logger.info("CDP session check: LinkedIn not logged in; open tabs: %s", ", ".join(urls_short))
+                msg = "LinkedIn is not logged in on the Chrome profile that is open with remote debugging."
                 if profile_hint:
                     msg += f" {profile_hint}"
                 else:
@@ -703,6 +701,16 @@ def check_feed_date_boundary(parsed_dates: List[date], start_date_obj: Optional[
     feed_has_depth = len(parsed_dates) >= 3 or scroll_count > 1
 
     return feed_tail_passed or feed_has_depth
+
+
+def _stable_id(*parts: Any) -> str:
+    """
+    Deterministic short digest for activity IDs. Python's hash() is salted per process,
+    so IDs built with it changed on every server restart and stored activities were
+    duplicated instead of updated.
+    """
+    joined = "\x1f".join(str(p or "") for p in parts)
+    return hashlib.sha1(joined.encode("utf-8", "replace")).hexdigest()[:16]
 
 
 def _clean_text(raw_html: str) -> str:
@@ -1071,7 +1079,8 @@ def _extract_activities_from_public_html(
                     continue
                 seen_keys.add(dedup_key)
 
-                act_uid = f"act_cmt_{clean_slug}_{abs(hash(comment_text[:60] + str(iso_date)))}"
+                # No date in the ID: dates come from relative times ("2d") and drift day to day.
+                act_uid = f"act_cmt_{clean_slug}_{_stable_id(comment_post_url, comment_text[:200])}"
                 extracted_activities.append({
                     "id": act_uid,
                     "subject_id": target_slug,
@@ -1259,7 +1268,7 @@ def _extract_activities_from_public_html(
                     continue
                 seen_keys.add(dedup_key)
 
-                act_uid = f"act_post_{clean_slug}_{abs(hash((clean_post_url or post_text[:60]) + action_type))}"
+                act_uid = f"act_post_{clean_slug}_{_stable_id(clean_post_url or post_text[:200], action_type)}"
                 act_headline_desc = f"{action_desc}: \"{post_text[:120]}\"" if post_text else action_desc
                 original_author = card_author or (display_name if is_own else "LinkedIn Author")
 
@@ -1466,7 +1475,8 @@ def _extract_activities_from_public_html(
                 continue
             seen_keys.add(dedup_key)
 
-            act_uid = f"act_urn_{urn_id}_{action_type}" if urn_id else f"act_feed_{clean_slug}_{abs(hash((clean_post_url or post_text[:60]) + action_type))}"
+            # The profile slug is part of every ID: two profiles reacting to the same post are separate events.
+            act_uid = f"act_urn_{clean_slug}_{urn_id}_{action_type}" if urn_id else f"act_feed_{clean_slug}_{_stable_id(clean_post_url or post_text[:200], action_type)}"
             act_headline_desc = f"{action_desc}: \"{post_text[:120]}\"" if post_text else action_desc
             original_author = card_author or (display_name if is_own else "LinkedIn Author")
 

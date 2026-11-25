@@ -120,6 +120,26 @@ def extract_slug(url_or_slug: str) -> str:
     return raw
 
 
+def _activity_merge_key(activity: Dict[str, Any]) -> str:
+    """
+    Identity of one activity event inside a single profile's history.
+
+    Built from content, not the stored ID: older IDs came from Python's per-process
+    hash() and changed on every restart, so keying on them stored the same event again
+    after each restart. Dates are left out when a post URL exists because they come from
+    relative times ("2d") and drift between runs.
+    """
+    kind = str(activity.get("action_type") or activity.get("type") or "post").lower().rstrip("s")
+    url = str(activity.get("post_url") or activity.get("original_post_url") or "").split("?")[0].rstrip("/").lower()
+    comment = re.sub(r"\s+", " ", str(activity.get("comment_text") or "")).strip().lower()[:160]
+    if url:
+        return f"{kind}|{url}|{comment}"
+    text = re.sub(r"\s+", " ", str(activity.get("text") or activity.get("post_content") or "")).strip().lower()[:160]
+    if text or comment:
+        return f"{kind}|{activity.get('date') or ''}|{text}|{comment}"
+    return f"id|{activity.get('id') or id(activity)}"
+
+
 def _load_history_from_json() -> Dict[str, Any]:
     hist_file = _get_history_file()
     if not hist_file.exists():
@@ -220,13 +240,11 @@ def save_profile_successful_analysis(slug_or_url: str, analysis_data: Dict[str, 
             for a in existing_acts:
                 if not a.get("storage_origin"):
                     a["storage_origin"] = "historical_mongodb"
-                key = a.get("id") or f"{a.get('type')}_{a.get('date')}_{a.get('text', '')[:40]}"
-                merged_map[key] = a
+                merged_map[_activity_merge_key(a)] = a
             for a in new_acts:
                 if not a.get("storage_origin"):
                     a["storage_origin"] = "live_retrieval"
-                key = a.get("id") or f"{a.get('type')}_{a.get('date')}_{a.get('text', '')[:40]}"
-                merged_map[key] = a
+                merged_map[_activity_merge_key(a)] = a
             merged_acts = sorted(
                 list(merged_map.values()),
                 key=lambda x: str(x.get("date") or ""),

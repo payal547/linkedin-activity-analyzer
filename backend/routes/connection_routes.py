@@ -1,7 +1,7 @@
 import re
 import uuid
 from flask import Blueprint, session, jsonify, request
-from auth.token_store import get_access_token
+from auth.token_store import get_access_token, get_oauth_access_token
 from linkedin.connections import fetch_linkedin_connections
 from linkedin.data_parser import parse_connections_csv, parse_connections_from_file_or_zip
 from services.profile_service import format_user_profile
@@ -42,9 +42,9 @@ def connections():
     self_profile = None
 
     if raw_profile:
-        access_token = get_access_token(session.get("linkedin_session_id"))
-        if not access_token:
-            access_token = session.get("linkedin_access_token")
+        # Only a real OAuth token can call LinkedIn's API; without one this returns
+        # "No access token provided." without making a request.
+        access_token = get_oauth_access_token()
         api_available, api_connections, api_message = fetch_linkedin_connections(access_token)
         raw_name = raw_profile.get("name", "").strip()
         slug = re.sub(r'[^a-zA-Z0-9_\-]', '', raw_name.lower().replace(' ', '-'))

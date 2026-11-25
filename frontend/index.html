@@ -58,13 +58,13 @@
                     <div class="auth-account-details">
                         <div class="auth-name-row">
                             <span id="authAccountName" class="auth-account-name">Aniket Pal</span>
-                            <span class="status-badge-connected">
+                            <span id="authStatusBadge" class="status-badge-connected">
                                 <span class="pulse-dot"></span>
                                 <span id="authStatusText">LinkedIn Connected ✓</span>
                             </span>
                         </div>
                         <div id="authAccountHeadline" class="auth-account-headline">Student at Graphic Era Deemed to be University</div>
-                        <div class="auth-session-meta">Testing Account • Authenticated Playwright Session Active</div>
+                        <div id="authSessionMeta" class="auth-session-meta">Testing account</div>
                     </div>
                 </div>
 
@@ -254,8 +254,8 @@
                 const response = await fetch("/api/auth/session-status", { credentials: "same-origin" });
                 const data = await readApiJson(response, "Session status");
 
-                if (response.ok && data.connected) {
-                    // Confirmed authenticated testing account
+                if (response.ok && data.authenticated) {
+                    // App account is known; the badge reflects whether Chrome is really logged in to LinkedIn.
                     if (loadingEl) loadingEl.style.display = "none";
                     if (disconnectedEl) disconnectedEl.style.display = "none";
                     if (connectedEl) connectedEl.style.display = "flex";
@@ -263,7 +263,16 @@
                     if (nameEl) nameEl.textContent = data.name || "Aniket Pal";
                     if (photoEl) photoEl.src = data.picture || "/aniket_pal.jpg";
                     if (headlineEl) headlineEl.textContent = data.headline || "Student at Graphic Era Deemed to be University";
-                    if (statusTextEl) statusTextEl.textContent = data.status_label || "LinkedIn Connected ✓";
+                    if (statusTextEl) statusTextEl.textContent = data.status_label || (data.connected ? "LinkedIn Connected ✓" : "LinkedIn not logged in");
+                    const badgeEl = document.getElementById("authStatusBadge");
+                    if (badgeEl) badgeEl.className = data.connected ? "status-badge-connected" : "status-badge-disconnected";
+                    const metaEl = document.getElementById("authSessionMeta");
+                    if (metaEl) {
+                        const sessionMsg = data.linkedin_session && data.linkedin_session.message;
+                        metaEl.textContent = data.connected
+                            ? `${data.account_type || "Testing account"} · ${sessionMsg || "LinkedIn session active in Chrome."}`
+                            : (sessionMsg || "Log in to LinkedIn in Chrome to fetch new activity.");
+                    }
 
                     // Store authenticated account metadata
                     sessionStorage.setItem("authenticatedAccount", JSON.stringify({
@@ -360,7 +369,7 @@
                      err.message.toLowerCase().includes("network") ||
                      err.message.toLowerCase().includes("failed")));
                 showError(isNetErr
-                    ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
+                    ? "⚠️ Could not reach the backend server. Please make sure the Flask server (python backend/app.py) is running."
                     : err.message);
                 if (btn) {
                     btn.disabled = false;
@@ -1070,7 +1079,7 @@
                      err.message.toLowerCase().includes("network") ||
                      err.message.toLowerCase().includes("failed")));
                 const _batchMsg = _batchNetErr
-                    ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
+                    ? "⚠️ Could not reach the backend server. Please make sure the Flask server (python backend/app.py) is running."
                     : (err.message || "Request failed.");
                 errorYouTubeProgressBar(_batchMsg);
                 if (progressCard) {

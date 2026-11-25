@@ -560,7 +560,7 @@ async function analyzeActivity() {
              err.message.toLowerCase().includes("network") ||
              err.message.toLowerCase().includes("failed")));
         const msg = isNetworkError
-            ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000, then try again."
+            ? "⚠️ Could not reach the backend server. Please make sure the Flask server (python backend/app.py) is running, then try again."
             : err.message;
         errorYouTubeProgressBar(msg);
         showError(msg);

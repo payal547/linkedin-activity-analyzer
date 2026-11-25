@@ -395,7 +395,7 @@ async function initDashboard() {
                 _nd.id = _noticeId;
                 _nd.style.cssText = "background:#fef3c7;color:#92400e;padding:10px 18px;font-size:13px;border-bottom:1px solid #fde68a;text-align:center;";
                 _nd.textContent = _isNetErr
-                    ? "⚠️ Could not reach the backend server. Please ensure the Flask server is running on port 5000."
+                    ? "⚠️ Could not reach the backend server. Please make sure the Flask server (python backend/app.py) is running."
                     : ("⚠️ Failed to load analysis from server: " + (e.message || "Unknown error"));
                 const _hdr = document.querySelector("header") || document.body.firstElementChild;
                 if (_hdr && _hdr.parentNode) _hdr.parentNode.insertBefore(_nd, _hdr.nextSibling);
@@ -598,9 +598,18 @@ function renderAnalysisResults(data) {
 
     const earliestRetrieved = data.earliest_retrieved_activity_date || (data.profile_results && data.profile_results[0] && data.profile_results[0].earliest_retrieved_activity_date);
     const latestRetrieved = data.latest_retrieved_activity_date || (data.profile_results && data.profile_results[0] && data.profile_results[0].latest_retrieved_activity_date);
+    // When the current attempt returned nothing and preserved history is displayed instead,
+    // report the dates of the activities actually on screen.
+    const shownHistory = data.historical_successful_analysis
+        || (data.profile_results && data.profile_results[0] && data.profile_results[0].historical_successful_analysis) || null;
+    const historyDates = (!earliestRetrieved && shownHistory && Array.isArray(shownHistory.activities))
+        ? shownHistory.activities.map(a => a && a.date).filter(d => /^\d{4}-\d{2}-\d{2}/.test(String(d || ""))).sort()
+        : [];
     if (retrievedEl) {
         if (earliestRetrieved && latestRetrieved) {
             retrievedEl.innerHTML = `<strong>Retrieved Range:</strong> ${escapeHTML(formatDateDDMMYY(earliestRetrieved))} – ${escapeHTML(formatDateDDMMYY(latestRetrieved))}`;
+        } else if (historyDates.length) {
+            retrievedEl.innerHTML = `<strong>Retrieved Range:</strong> ${escapeHTML(formatDateDDMMYY(historyDates[0]))} – ${escapeHTML(formatDateDDMMYY(historyDates[historyDates.length - 1]))} <em>(preserved history)</em>`;
         } else {
             retrievedEl.innerHTML = `<strong>Retrieved Range:</strong> <em>No dated activities retrieved</em>`;
         }
@@ -1118,9 +1127,12 @@ function renderAnalysisResults(data) {
 
 
 
-        let sSummary = data.sentiment_summary || null;
+        // A failed attempt still carries a summary object with every count at 0; treat it as
+        // missing so the preserved activities shown below are used instead.
+        const summaryTotal = (s) => s ? ["positive", "negative", "neutral"].reduce((n, k) => n + (Number(s[k]) || 0), 0) : 0;
+        let sSummary = summaryTotal(data.sentiment_summary) > 0 ? data.sentiment_summary : null;
 
-        if (!sSummary && isSingleUsingHistorical && histData && histData.sentiment_summary) {
+        if (!sSummary && isSingleUsingHistorical && histData && summaryTotal(histData.sentiment_summary) > 0) {
 
             sSummary = histData.sentiment_summary;
 
@@ -1637,7 +1649,8 @@ function renderAnalysisResults(data) {
 
                 displayTitle = "LinkedIn Authentication Required";
 
-                descText = `<div style="margin-bottom:8px;">${escapeHTML(emptyTitle)}</div><div style="font-size:13px; color:#475569; margin-top:8px;">To connect, close open Chrome windows and launch: <code style="background:#e2e8f0; padding:2px 6px; border-radius:4px;">backend\\scripts\\launch_chrome_with_debug.bat</code></div>`;
+                // The full reason is already in the banner at the top of the page; keep this one short.
+                descText = `No new activity was fetched because Chrome is not logged in to LinkedIn. See the message at the top of the page.`;
 
             } else if (statusType === "ACTIVITY_SECTION_UNAVAILABLE" || lowerTitle.includes("not accessible for this profile")) {
 
@@ -1703,7 +1716,11 @@ function renderAnalysisResults(data) {
 
 
 
-            const statusNote = singleRes.retrieval_status ? `<p style="margin-top:10px; color:#475569; font-size:14px;"><strong>Diagnostic details:</strong> ${escapeHTML(singleRes.retrieval_status)}</p>` : "";
+            // Skip the raw status when it only repeats the message already shown above.
+            const isAuthStatus = ["AUTH_REQUIRED", "SESSION_EXPIRED", "AUTH_FAILED"].includes(statusType);
+            const statusNote = (singleRes.retrieval_status && !isAuthStatus && singleRes.retrieval_status !== emptyTitle)
+                ? `<p style="margin-top:10px; color:#475569; font-size:13px;"><strong>Details:</strong> ${escapeHTML(singleRes.retrieval_status)}</p>`
+                : "";
 
 
 

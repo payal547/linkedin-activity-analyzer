@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict
 from urllib.parse import urlparse
 from flask import Blueprint, g, jsonify, request, session
-from auth.token_store import get_access_token
+from auth.token_store import get_access_token, get_oauth_access_token
 from services.activity_service import get_activities_for_subject
 from services.analysis_service import analyze_activities
 from services.sentiment_service import compute_sentiment_summary
@@ -627,7 +627,7 @@ def analyze():
     Accepts JSON payload: { subject_id, subject_name, subject_url, headline, data_source, dateType, startDate, endDate, activities }
     Also accepts optional CSV or ZIP upload as a secondary fallback if user wants to import an export.
     """
-    access_token = get_access_token(session.get("linkedin_session_id")) or session.get("linkedin_access_token")
+    access_token = get_oauth_access_token()
 
     # Generate or reuse Run ID for unified tracing across logging & pipeline monitoring
     req_run_id = request.headers.get("X-Run-ID") or request.args.get("run_id")
